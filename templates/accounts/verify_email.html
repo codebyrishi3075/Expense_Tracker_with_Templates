@@ -1,0 +1,189 @@
+{% extends 'base.html' %}
+{% block title %}Verify OTP - Expense Tracker{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
+  <div class="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
+
+    <div class="flex justify-center mb-4">
+      <div class="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center text-3xl">
+        {% if purpose == 'reset' %}🔐{% else %}📧{% endif %}
+      </div>
+    </div>
+
+    <h2 class="text-2xl font-bold text-center text-gray-800 mb-1">
+      {% if purpose == 'reset' %}Password Reset OTP{% else %}Verify Your Email{% endif %}
+    </h2>
+    <p class="text-center text-gray-500 text-sm mb-1">
+      We've sent a 6-digit OTP to
+    </p>
+    <p class="text-center font-semibold text-indigo-600 mb-6">{{ email }}</p>
+
+    <div id="msg-box" class="hidden mb-4 px-4 py-3 rounded-lg text-sm font-medium"></div>
+
+    <form id="verify-form" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="email"   value="{{ email }}" />
+      <input type="hidden" name="purpose" value="{{ purpose }}" />
+
+      <div class="mb-6">
+        <label class="block text-sm font-medium text-gray-700 mb-3 text-center">Enter 6-digit OTP</label>
+
+        <div class="flex justify-center gap-2" id="otp-boxes">
+          {% for i in "123456" %}
+          <input type="text" maxlength="1"
+            class="otp-input w-11 h-12 text-center text-xl font-bold border-2 border-gray-300 rounded-lg
+                   focus:outline-none focus:border-indigo-500 transition" />
+          {% endfor %}
+        </div>
+        <input type="hidden" name="otp" id="otp_combined" />
+      </div>
+
+      <!-- Timer -->
+      <div class="text-center text-sm text-gray-500 mb-5">
+        OTP expires in: <span id="timer" class="font-bold text-indigo-600">15:00</span>
+      </div>
+
+      <button type="submit" id="verify-btn"
+        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg transition">
+        Verify OTP
+      </button>
+    </form>
+
+    <!-- Resend -->
+    <div class="text-center mt-5">
+      <p class="text-sm text-gray-500 mb-1">Didn't receive the OTP?</p>
+      <button id="resend-btn" disabled
+        class="text-indigo-600 font-semibold text-sm hover:underline disabled:opacity-40 disabled:cursor-not-allowed">
+        Resend OTP
+      </button>
+      <p class="text-xs text-gray-400 mt-1" id="resend-note">Available after timer expires</p>
+    </div>
+
+    <p class="text-center text-sm text-gray-500 mt-5">
+      {% if purpose == 'reset' %}
+        Back to <a href="{% url 'accounts:loginUser' %}" class="text-indigo-600 font-semibold hover:underline">Login</a>
+      {% else %}
+        Wrong email? <a href="{% url 'accounts:registerUser' %}" class="text-indigo-600 font-semibold hover:underline">Go back</a>
+      {% endif %}
+    </p>
+
+  </div>
+</div>
+
+<script>
+  // ── OTP Box Logic ─────────────────────────────────────────
+  const otpInputs = document.querySelectorAll('.otp-input');
+
+  otpInputs.forEach((input, idx) => {
+    input.addEventListener('input', e => {
+      e.target.value = e.target.value.replace(/[^0-9]/g, '');
+      if (e.target.value && idx < otpInputs.length - 1) otpInputs[idx + 1].focus();
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Backspace' && !e.target.value && idx > 0) otpInputs[idx - 1].focus();
+    });
+    input.addEventListener('paste', e => {
+      e.preventDefault();
+      const pasted = e.clipboardData.getData('text').replace(/[^0-9]/g, '');
+      [...pasted].forEach((ch, i) => { if (otpInputs[idx + i]) otpInputs[idx + i].value = ch; });
+      const next = [...otpInputs].findIndex(i => !i.value);
+      if (next !== -1) otpInputs[next].focus();
+    });
+  });
+
+  // ── Countdown Timer ───────────────────────────────────────
+  let timeLeft = 15 * 60;
+  const timerEl    = document.getElementById('timer');
+  const resendBtn  = document.getElementById('resend-btn');
+  const resendNote = document.getElementById('resend-note');
+
+  function startTimer(seconds) {
+    timeLeft = seconds;
+    const tick = setInterval(() => {
+      timeLeft--;
+      const m = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+      const s = String(timeLeft % 60).padStart(2, '0');
+      timerEl.textContent = `${m}:${s}`;
+      if (timeLeft <= 0) {
+        clearInterval(tick);
+        timerEl.textContent = 'Expired';
+        timerEl.className   = 'font-bold text-red-500';
+        resendBtn.disabled  = false;
+        resendNote.textContent = 'Click to get a new OTP';
+      }
+    }, 1000);
+  }
+
+  startTimer(15 * 60);
+
+  // ── Verify Form ───────────────────────────────────────────
+  document.getElementById('verify-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+
+    const otp = [...otpInputs].map(i => i.value).join('');
+    document.getElementById('otp_combined').value = otp;
+
+    if (otp.length !== 6) { showMsg('Enter all 6 digits.', 'error'); return; }
+
+    const btn = document.getElementById('verify-btn');
+    btn.disabled = true; btn.textContent = 'Verifying...';
+
+    try {
+      const fd = new FormData(this);
+      const res  = await fetch("{% url 'accounts:verifyOTP' %}", {
+        method: 'POST', body: fd,
+        headers: { 'X-CSRFToken': fd.get('csrfmiddlewaretoken') }
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        showMsg(data.message, 'success');
+        setTimeout(() => window.location.href = data.redirect_url, 1500);
+      } else {
+        showMsg(data.error || 'Verification failed!', 'error');
+        otpInputs.forEach(i => i.value = '');
+        otpInputs[0].focus();
+      }
+    } catch { showMsg('Something went wrong.', 'error'); }
+    finally  { btn.disabled = false; btn.textContent = 'Verify OTP'; }
+  });
+
+  // ── Resend OTP ────────────────────────────────────────────
+  resendBtn.addEventListener('click', async function () {
+    this.disabled = true; this.textContent = 'Sending...';
+    const email   = document.querySelector('[name="email"]').value;
+    const purpose = document.querySelector('[name="purpose"]').value;
+    const csrf    = document.querySelector('[name="csrfmiddlewaretoken"]').value;
+
+    try {
+      const fd = new FormData();
+      fd.append('email', email); fd.append('purpose', purpose);
+      const res  = await fetch("{% url 'accounts:resendOTP' %}", {
+        method: 'POST', body: fd, headers: { 'X-CSRFToken': csrf }
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        showMsg(data.message, 'success');
+        timerEl.className   = 'font-bold text-indigo-600';
+        resendNote.textContent = 'Available after timer expires';
+        this.disabled = true;
+        startTimer(15 * 60);
+      } else {
+        showMsg(data.error || 'Failed to resend.', 'error');
+        this.disabled = false;
+      }
+    } catch { showMsg('Something went wrong.', 'error'); this.disabled = false; }
+    this.textContent = 'Resend OTP';
+  });
+
+  // ── Helper ────────────────────────────────────────────────
+  function showMsg(text, type) {
+    const box = document.getElementById('msg-box');
+    box.className   = `mb-4 px-4 py-3 rounded-lg text-sm font-medium ${type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`;
+    box.textContent = text;
+    box.classList.remove('hidden');
+  }
+</script>
+{% endblock %}

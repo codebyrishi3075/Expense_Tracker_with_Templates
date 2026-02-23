@@ -1,0 +1,232 @@
+{% extends 'base.html' %}
+{% block title %}{{ action }} Expense - FinPocket{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 700px;">
+
+  <!-- ── Breadcrumb ───────────────────────────────────────── -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'expenses:list' %}">Expenses</a></li>
+      <li class="breadcrumb-item active">{{ action }} Expense</li>
+    </ol>
+  </nav>
+
+  <h3 class="fw-bold mb-4">
+    {% if action == 'Edit' %}
+      <i class="bi bi-pencil-square text-primary me-2"></i>Edit Expense
+    {% else %}
+      <i class="bi bi-plus-circle text-primary me-2"></i>Add New Expense
+    {% endif %}
+  </h3>
+
+  <!-- ── Message Box ──────────────────────────────────────── -->
+  <div id="msg-box" class="alert d-none mb-4"></div>
+
+  <!-- ── Form ─────────────────────────────────────────────── -->
+  <div class="card shadow-sm">
+    <div class="card-body p-4">
+      <form id="expense-form" novalidate>
+        {% csrf_token %}
+
+        <div class="row g-3">
+
+          <!-- Amount -->
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Amount (₹) <span class="text-danger">*</span></label>
+            <div class="input-group">
+              <span class="input-group-text">₹</span>
+              <input type="number" name="amount" step="0.01" min="0.01"
+                     value="{{ expense.amount|default:'' }}"
+                     placeholder="0.00"
+                     class="form-control" required />
+            </div>
+            <div class="invalid-feedback" id="err-amount"></div>
+          </div>
+
+          <!-- Date -->
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
+            <input type="date" name="date"
+                   value="{{ expense.date|default:today }}"
+                   max="{{ today }}"
+                   class="form-control" required />
+            <div class="invalid-feedback" id="err-date"></div>
+          </div>
+
+          <!-- Category -->
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
+            <select name="category" class="form-select" required>
+              <option value="">-- Select Category --</option>
+              {% for cat in categories %}
+                <option value="{{ cat.id }}"
+                  {% if expense.category.id == cat.id %}selected{% endif %}>
+                  {{ cat.name }}
+                </option>
+              {% endfor %}
+            </select>
+            <div class="invalid-feedback" id="err-category"></div>
+            <a href="/budget/categories/add/" class="text-primary" style="font-size:.8rem;">
+              + Add new category
+            </a>
+          </div>
+
+          <!-- Expense Type -->
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Expense Type</label>
+            <select name="expense_type" class="form-select">
+              <option value="variable" {% if expense.expense_type == 'variable' %}selected{% endif %}>Variable</option>
+              <option value="fixed"    {% if expense.expense_type == 'fixed'    %}selected{% endif %}>Fixed</option>
+            </select>
+          </div>
+
+          <!-- Notes -->
+          <div class="col-12">
+            <label class="form-label fw-semibold">Notes</label>
+            <input type="text" name="notes" maxlength="255"
+                   value="{{ expense.notes|default:'' }}"
+                   placeholder="Brief description (optional)"
+                   class="form-control" />
+            <div class="form-text">Max 255 characters</div>
+          </div>
+
+          <!-- Recurring toggle -->
+          <div class="col-12">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="is_recurring" id="is-recurring"
+                     {% if expense.is_recurring %}checked{% endif %} />
+              <label class="form-check-label fw-semibold" for="is-recurring">
+                Recurring Expense
+              </label>
+            </div>
+          </div>
+
+          <!-- Recurring fields (shown only when toggle is ON) -->
+          <div id="recurring-fields" class="col-12 {% if not expense.is_recurring %}d-none{% endif %}">
+            <div class="p-3 rounded-3 border border-dashed" style="border-color:#e2e8f0; background:#f8fafc;">
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label fw-semibold" style="font-size:.88rem;">Due Date</label>
+                  <input type="date" name="due_date"
+                         value="{{ expense.due_date|default:'' }}"
+                         class="form-control form-control-sm" />
+                  <div class="invalid-feedback" id="err-due_date"></div>
+                </div>
+                <div class="col-md-6 d-flex align-items-end pb-1">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="auto_pay" id="auto-pay"
+                           {% if expense.auto_pay %}checked{% endif %} />
+                    <label class="form-check-label fw-semibold" for="auto-pay" style="font-size:.88rem;">
+                      Auto Pay
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /row -->
+
+        <!-- ── Submit ───────────────────────────────────────── -->
+        <div class="d-flex gap-3 mt-4">
+          <button type="submit" id="submit-btn" class="btn btn-primary fw-semibold px-4">
+            {% if action == 'Edit' %}
+              <i class="bi bi-check-circle me-1"></i>Update Expense
+            {% else %}
+              <i class="bi bi-plus-circle me-1"></i>Add Expense
+            {% endif %}
+          </button>
+          <a href="{% url 'expenses:list' %}" class="btn btn-outline-secondary fw-semibold px-4">
+            Cancel
+          </a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+$(function () {
+
+  // ── Toggle recurring fields ──────────────────────────────
+  $('#is-recurring').on('change', function () {
+    $('#recurring-fields').toggleClass('d-none', !this.checked);
+  });
+
+  // ── Form Submit via AJAX ─────────────────────────────────
+  $('#expense-form').on('submit', function (e) {
+    e.preventDefault();
+    clearErrors();
+
+    const btn      = $('#submit-btn');
+    const origText = btn.html();
+    btn.prop('disabled', true).html(
+      '<span class="spinner-border spinner-border-sm me-1"></span> Saving...'
+    );
+
+    // Determine URL — edit or add
+    {% if expense %}
+      const url = '/expenses/edit/{{ expense.id }}/';
+    {% else %}
+      const url = '{% url "expenses:add" %}';
+    {% endif %}
+
+    $.ajax({
+      url        : url,
+      method     : 'POST',
+      data       : new FormData(this),
+      processData: false,
+      contentType: false,
+      success    : function(data) {
+        if (data.success) {
+          showMsg(data.message, 'success');
+          setTimeout(() => window.location.href = '{% url "expenses:list" %}', 1200);
+        } else {
+          showMsg(data.message || 'Failed.', 'danger');
+        }
+      },
+      error: function(xhr) {
+        let res = {};
+        try { res = JSON.parse(xhr.responseText); } catch(e) {}
+
+        if (res.error && typeof res.error === 'object') {
+          // Field-level errors from validate_expense_data
+          $.each(res.error, function(field, msg) {
+            const errEl = $(`#err-${field}`);
+            if (errEl.length) {
+              errEl.text(Array.isArray(msg) ? msg[0] : msg).show();
+              $(`[name="${field}"]`).addClass('is-invalid');
+            }
+          });
+          showMsg('Please fix the errors below.', 'danger');
+        } else {
+          showMsg(res.error || 'Something went wrong.', 'danger');
+        }
+      },
+      complete: function() {
+        btn.prop('disabled', false).html(origText);
+      }
+    });
+  });
+
+  function showMsg(text, type) {
+    $('#msg-box')
+      .removeClass('d-none alert-success alert-danger')
+      .addClass(`alert-${type}`)
+      .text(text);
+  }
+
+  function clearErrors() {
+    $('.is-invalid').removeClass('is-invalid');
+    $('.invalid-feedback').text('').hide();
+    $('#msg-box').addClass('d-none');
+  }
+});
+</script>
+{% endblock %}

@@ -1,146 +1,262 @@
+import random
 from django.shortcuts import render, redirect
 from django.http import JsonResponse, HttpRequest, HttpResponse
-from .models import User, UserToken
-from .authentication import create_access_token, create_refresh_token
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+from django.core.mail import send_mail
+from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
 
-# Create your views here.
+from .models import User, UserToken, EmailOTP
+from .authentication import create_access_token, create_refresh_token
+from .decorators import jwt_required
 
 
+# ─────────────────────────────────────────────────────────────
+# HELPER — Generate OTP
+# ─────────────────────────────────────────────────────────────
+def generate_otp():
+    return str(random.randint(100000, 999999))
+
+
+# ─────────────────────────────────────────────────────────────
+# HELPER — Send OTP Email
+# ─────────────────────────────────────────────────────────────
+def send_otp_email(user: User, purpose: str = 'register') -> None:
+    """Generate OTP, save to DB, send email. purpose: 'register' or 'reset'"""
+
+    # Delete old OTPs for same purpose
+    EmailOTP.objects.filter(user=user, purpose=purpose).delete()
+
+    otp = generate_otp()
+    EmailOTP.objects.create(user=user, otp=otp, purpose=purpose)
+
+    if purpose == 'register':
+        subject = "Verify Your Email — Expense Tracker"
+        message = (
+            f"Hi {user.first_name or user.username},\n\n"
+            f"Your email verification OTP is:\n\n"
+            f"  {otp}\n\n"
+            f"This OTP is valid for 15 minutes.\n"
+            f"Do not share this with anyone.\n\n"
+            f"— Expense Tracker Team"
+        )
+    else:
+        subject = "Password Reset OTP — Expense Tracker"
+        message = (
+            f"Hi {user.first_name or user.username},\n\n"
+            f"Your password reset OTP is:\n\n"
+            f"  {otp}\n\n"
+            f"This OTP is valid for 15 minutes.\n"
+            f"If you did not request this, please ignore this email.\n\n"
+            f"— Expense Tracker Team"
+        )
+
+    send_mail(subject, message, settings.EMAIL_HOST_USER, [user.email], fail_silently=False)
+
+
+# ═════════════════════════════════════════════════════════════
+# REGISTER
+# ═════════════════════════════════════════════════════════════
 def register_view(request: HttpRequest) -> HttpResponse:
     if request.method == 'GET':
-        return render(request, 'account/account.html')
+        return render(request, 'accounts/register.html')
 
     elif request.method == 'POST':
-        print("POST DATA:", request.POST)
-        user = None  # Safeguard for cleanup on exception
-
+        user = None
         try:
-            first_name = request.POST.get("first_name", '').strip()
-            last_name = request.POST.get("last_name", '').strip()
-            email = request.POST.get("email", '').strip()
-            phone_number = request.POST.get("phone_number", '').strip()
-            password = request.POST.get("password", '')
+            first_name       = request.POST.get("first_name", '').strip()
+            last_name        = request.POST.get("last_name", '').strip()
+            email            = request.POST.get("email", '').strip()
+            phone_number     = request.POST.get("phone_number", '').strip()
+            password         = request.POST.get("password", '')
             confirm_password = request.POST.get("confirm_password", '')
 
-            # Validation
+            # Validations
             if not all([first_name, last_name, email, password, confirm_password, phone_number]):
                 return JsonResponse({'error': 'All fields are required!'}, status=400)
 
-            # Validate phone number is exactly 10 digits
             if not phone_number.isdigit() or len(phone_number) != 10:
                 return JsonResponse({'error': 'Phone number must be exactly 10 digits!'}, status=400)
 
             if User.objects.filter(email=email).exists():
-                return JsonResponse({'error': 'Email already exists!'}, status=400)
+                return JsonResponse({'error': 'Email already registered!'}, status=400)
 
-            # Auto-generate username from email (part before @)
             username = email.split('@')[0]
-            
             if User.objects.filter(username=username).exists():
-                return JsonResponse({'error': 'Username already exists!'}, status=400)
+                import uuid
+                username = username + str(uuid.uuid4())[:4]
 
             if password != confirm_password:
                 return JsonResponse({'error': 'Passwords do not match!'}, status=400)
 
             if len(password) < 5:
-                return JsonResponse({'error': 'Password must be at least 5 characters long'}, status=400)
+                return JsonResponse({'error': 'Password must be at least 5 characters.'}, status=400)
 
-            # Create the user (inactive)
+            # Create inactive user
             user = User.objects.create_user(
-                first_name=first_name,
-                last_name=last_name,
-                username=username,
-                email=email,
-                phone_number=phone_number,
-                password=password,
-                is_active=True
+                first_name        = first_name,
+                last_name         = last_name,
+                username          = username,
+                email             = email,
+                phone_number      = phone_number,
+                password          = password,
+                is_active         = False,       # activate after email verify
+                is_email_verified = False,
             )
 
-            print("User created successfully:", user.email)
-
-            # Send verification email
-            # -------------------------
+            send_otp_email(user, purpose='register')
 
             return JsonResponse({
-                'success': True,
-                'message': 'Check your email for the activation link!',
-                'redirect_url': '/accounts/login/'
-            }, status=200)
+                'success'      : True,
+                'message'      : 'OTP sent to your email. Please verify to activate your account.',
+                'redirect_url' : f'/accounts/verify-otp/?email={email}&purpose=register'
+            }, status=201)
 
         except Exception as e:
-            print("Error during registration:", str(e))
-            if user:  # Delete only if user was created
+            print("Registration error:", str(e))
+            if user:
                 user.delete()
             return JsonResponse({'error': str(e)}, status=400)
 
     return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
 
 
-
-def login_view(request: HttpRequest) -> HttpResponse:
+# ═════════════════════════════════════════════════════════════
+# VERIFY OTP (Register + Password Reset both use this view)
+# ═════════════════════════════════════════════════════════════
+def verify_otp_view(request: HttpRequest) -> HttpResponse:
     if request.method == 'GET':
-        return render(request, 'account/login.html')
+        email   = request.GET.get('email', '')
+        purpose = request.GET.get('purpose', 'register')
+        return render(request, 'accounts/verify_email.html', {'email': email, 'purpose': purpose})
 
     elif request.method == 'POST':
         try:
-            email = request.POST.get("email")
-            password = request.POST.get("password")
+            email   = request.POST.get('email', '').strip()
+            otp     = request.POST.get('otp', '').strip()
+            purpose = request.POST.get('purpose', 'register')
+
+            if not email or not otp:
+                return JsonResponse({'error': 'Email and OTP are required!'}, status=400)
+
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                return JsonResponse({'error': 'Invalid email.'}, status=404)
+
+            otp_obj = EmailOTP.objects.filter(
+                user    = user,
+                otp     = otp,
+                purpose = purpose,
+                is_used = False
+            ).last()
+
+            if not otp_obj:
+                return JsonResponse({'error': 'Invalid OTP. Please check and try again.'}, status=400)
+
+            if otp_obj.is_expired():
+                return JsonResponse({'error': 'OTP has expired. Please request a new one.'}, status=400)
+
+            # Mark OTP used
+            otp_obj.is_used = True
+            otp_obj.save()
+
+            if purpose == 'register':
+                user.is_active         = True
+                user.is_email_verified = True
+                user.save()
+                return JsonResponse({
+                    'success'      : True,
+                    'message'      : 'Email verified successfully! You can now login.',
+                    'redirect_url' : '/accounts/login/'
+                })
+
+            else:  # purpose == 'reset'
+                # OTP verified — redirect to password reset confirm page
+                return JsonResponse({
+                    'success'      : True,
+                    'message'      : 'OTP verified. Please set your new password.',
+                    'redirect_url' : f'/accounts/password-reset/confirm/?email={email}'
+                })
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+    return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
+
+
+# ═════════════════════════════════════════════════════════════
+# RESEND OTP
+# ═════════════════════════════════════════════════════════════
+def resend_otp_view(request: HttpRequest) -> HttpResponse:
+    if request.method == 'POST':
+        try:
+            email   = request.POST.get('email', '').strip()
+            purpose = request.POST.get('purpose', 'register')
+
+            if not email:
+                return JsonResponse({'error': 'Email is required!'}, status=400)
+
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                return JsonResponse({'error': 'User not found!'}, status=404)
+
+            if purpose == 'register' and user.is_email_verified:
+                return JsonResponse({'error': 'Account already verified. Please login.'}, status=400)
+
+            send_otp_email(user, purpose=purpose)
+            return JsonResponse({'success': True, 'message': 'New OTP sent to your email!'})
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+    return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
+
+
+# ═════════════════════════════════════════════════════════════
+# LOGIN
+# ═════════════════════════════════════════════════════════════
+def login_view(request: HttpRequest) -> HttpResponse:
+    if request.method == 'GET':
+        if request.COOKIES.get('access_token'):
+            return redirect('accounts:dashboard')
+        return render(request, 'accounts/login.html')
+
+    elif request.method == 'POST':
+        try:
+            email    = request.POST.get("email", '').strip()
+            password = request.POST.get("password", '')
 
             user = authenticate(request, username=email, password=password)
-            
+
             if user is None:
-                return JsonResponse({'status': 'error', 'message': 'Invalid credentials'}, status=401)
-            
-            if not user.is_active:
+                return JsonResponse({'status': 'error', 'message': 'Invalid email or password!'}, status=401)
+
+            if not user.is_email_verified:
                 return JsonResponse({
-                    'status': 'error',
-                    'message': 'Your email is not verified. Please check your inbox and activate your account.'
+                    'status'       : 'error',
+                    'message'      : 'Email not verified. Please check your inbox.',
+                    'redirect_url' : f'/accounts/verify-otp/?email={email}&purpose=register'
                 }, status=403)
 
             login(request, user)
 
-            access_token = create_access_token(user)
+            access_token  = create_access_token(user)
             refresh_token = create_refresh_token(user)
 
-            # Determine redirect URL based on role
-            redirect_url = '/accounts/dashboard/'
-
-            # Save refresh token in DB
             UserToken.objects.create(
-                user=user,
-                token=refresh_token,
-                expired_at=timezone.now() + timedelta(days=7)
+                user       = user,
+                token      = refresh_token,
+                expired_at = timezone.now() + timedelta(days=7)
             )
 
-            response = JsonResponse({
-                "status": "success",
-                "redirect_url": redirect_url
-            })
-
-            # Set tokens in HTTP-only cookies
-            response.set_cookie(
-                key='access_token',
-                value=access_token,
-                httponly=True,
-                secure=False,
-                samesite='Lax',
-                max_age=2400,
-                path='/'
-            )
-
-            response.set_cookie(
-                key='refresh_token',
-                value=refresh_token,
-                httponly=True,
-                secure=False,
-                samesite='Lax',
-                max_age=7 * 24 * 60 * 60,
-                path="/"
-            )
-
+            response = JsonResponse({"status": "success", "redirect_url": "/accounts/dashboard/"})
+            response.set_cookie('access_token',  access_token,  httponly=True, secure=False, samesite='Lax', max_age=2400,       path='/')
+            response.set_cookie('refresh_token', refresh_token, httponly=True, secure=False, samesite='Lax', max_age=7*24*60*60, path='/')
             return response
 
         except Exception as e:
@@ -148,38 +264,177 @@ def login_view(request: HttpRequest) -> HttpResponse:
 
     return JsonResponse({'status': 'error', 'message': 'Invalid HTTP method'}, status=405)
 
-from accounts.decorators import jwt_required
 
+# ═════════════════════════════════════════════════════════════
+# DASHBOARD
+# ═════════════════════════════════════════════════════════════
 @jwt_required
 def dashboard_view(request):
     context = {
-        'user': request.user,
-        'username': request.user.username,
+        'user'      : request.user,
+        'full_name' : f"{request.user.first_name} {request.user.last_name}".strip(),
     }
-    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-        # AJAX request, return partial dashboard content only
-        return render(request, 'accounts/dashboard.html', context)
-    else:
-        # When AJAX request is not detected, render 
-        return render(request, 'accounts/dashboard.html', context)
+    return render(request, 'accounts/dashboard.html', context)
 
 
+# ═════════════════════════════════════════════════════════════
+# PROFILE — View & Update
+# ═════════════════════════════════════════════════════════════
+@jwt_required
+def profile_view(request):
+    user = request.user
+
+    if request.method == 'POST':
+        try:
+            first_name   = request.POST.get('first_name', '').strip()
+            last_name    = request.POST.get('last_name', '').strip()
+            phone_number = request.POST.get('phone_number', '').strip()
+
+            if not all([first_name, last_name]):
+                return JsonResponse({'error': 'First and last name are required!'}, status=400)
+
+            if phone_number and (not phone_number.isdigit() or len(phone_number) != 10):
+                return JsonResponse({'error': 'Phone number must be exactly 10 digits!'}, status=400)
+
+            user.first_name   = first_name
+            user.last_name    = last_name
+            user.phone_number = phone_number
+            user.save()
+
+            return JsonResponse({'success': True, 'message': 'Profile updated successfully!'})
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+    return render(request, 'accounts/profile.html', {'user': user})
+
+
+# ═════════════════════════════════════════════════════════════
+# UPLOAD PROFILE PICTURE
+# ═════════════════════════════════════════════════════════════
+@jwt_required
+def upload_avatar_view(request):
+    if request.method == 'POST':
+        try:
+            file = request.FILES.get('profile_image')
+
+            if not file:
+                return JsonResponse({'error': 'No file provided.'}, status=400)
+
+            # Validate file type
+            allowed_types = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp']
+            if file.content_type not in allowed_types:
+                return JsonResponse({'error': 'Only JPG, PNG, WEBP images allowed.'}, status=400)
+
+            user = request.user
+            user.profile_image = file
+            user.save()
+
+            return JsonResponse({
+                'success'           : True,
+                'message'           : 'Profile picture updated!',
+                'profile_image_url' : request.build_absolute_uri(user.profile_image.url)
+            })
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+    return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
+
+
+# ═════════════════════════════════════════════════════════════
+# PASSWORD RESET — Step 1: Request OTP
+# ═════════════════════════════════════════════════════════════
+def password_reset_request_view(request: HttpRequest) -> HttpResponse:
+    if request.method == 'GET':
+        return render(request, 'accounts/password_reset_request.html')
+
+    elif request.method == 'POST':
+        try:
+            email = request.POST.get('email', '').strip()
+
+            if not email:
+                return JsonResponse({'error': 'Email is required!'}, status=400)
+
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                return JsonResponse({'error': 'No account found with this email.'}, status=404)
+
+            send_otp_email(user, purpose='reset')
+
+            return JsonResponse({
+                'success'      : True,
+                'message'      : 'Password reset OTP sent to your email!',
+                'redirect_url' : f'/accounts/verify-otp/?email={email}&purpose=reset'
+            })
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+    return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
+
+
+# ═════════════════════════════════════════════════════════════
+# PASSWORD RESET — Step 2: Set New Password (after OTP verified)
+# ═════════════════════════════════════════════════════════════
+def password_reset_confirm_view(request: HttpRequest) -> HttpResponse:
+    if request.method == 'GET':
+        email = request.GET.get('email', '')
+        return render(request, 'accounts/password_reset_confirm.html', {'email': email})
+
+    elif request.method == 'POST':
+        try:
+            email        = request.POST.get('email', '').strip()
+            new_password = request.POST.get('new_password', '')
+            confirm_pass = request.POST.get('confirm_password', '')
+
+            if not email or not new_password:
+                return JsonResponse({'error': 'Email and new password are required!'}, status=400)
+
+            if new_password != confirm_pass:
+                return JsonResponse({'error': 'Passwords do not match!'}, status=400)
+
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                return JsonResponse({'error': 'Invalid email.'}, status=404)
+
+            # Django's built-in password validation
+            try:
+                validate_password(new_password, user)
+            except ValidationError as e:
+                return JsonResponse({'error': list(e.messages)}, status=400)
+
+            user.set_password(new_password)
+            user.save()
+
+            return JsonResponse({
+                'success'      : True,
+                'message'      : 'Password reset successful! Please login.',
+                'redirect_url' : '/accounts/login/'
+            })
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+    return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
+
+
+# ═════════════════════════════════════════════════════════════
+# LOGOUT
+# ═════════════════════════════════════════════════════════════
 def logout_view(request):
     try:
-        user = request.user
         refresh_token = request.COOKIES.get('refresh_token')
-
         if refresh_token:
-            UserToken.objects.filter(user=user, token=refresh_token).delete()
+            UserToken.objects.filter(user=request.user, token=refresh_token).delete()
 
         logout(request)
 
         response = redirect('accounts:loginUser')
-
-        # Delete cookies with the correct paths
-        response.delete_cookie('access_token', path='/')     # Access token
-        response.delete_cookie('refresh_token', path='/')    # Refresh token
-
+        response.delete_cookie('access_token',  path='/')
+        response.delete_cookie('refresh_token', path='/')
         return response
 
     except Exception as e:

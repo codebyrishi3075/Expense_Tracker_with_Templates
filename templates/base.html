@@ -1,0 +1,337 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Expense Tracker & Budget Planner{% endblock %}</title>
+
+  <!-- ── Bootstrap 5 CSS ─────────────────────────────────── -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+    crossorigin="anonymous"
+  />
+
+  <!-- ── Bootstrap Icons ─────────────────────────────────── -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+  />
+
+  <!-- ── Google Fonts ────────────────────────────────────── -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- ── Custom Base Styles ──────────────────────────────── -->
+  <style>
+    /* ── Root Variables ─────────────────────────────── */
+    :root {
+      --primary      : #4f46e5;   /* Indigo-600  */
+      --primary-dark : #4338ca;   /* Indigo-700  */
+      --primary-light: #eef2ff;   /* Indigo-50   */
+      --success      : #16a34a;
+      --danger       : #dc2626;
+      --warning      : #d97706;
+      --sidebar-w    : 260px;
+      --navbar-h     : 64px;
+    }
+
+    /* ── Global ─────────────────────────────────────── */
+    * { box-sizing: border-box; }
+
+    body {
+      font-family    : 'Inter', sans-serif;
+      background     : #f8fafc;
+      color          : #1e293b;
+      min-height     : 100vh;
+    }
+
+    /* ── Scrollbar ───────────────────────────────────── */
+    ::-webkit-scrollbar        { width: 6px; }
+    ::-webkit-scrollbar-track  { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb  { background: #cbd5e1; border-radius: 3px; }
+
+    /* ── Navbar ──────────────────────────────────────── */
+    .main-navbar {
+      height          : var(--navbar-h);
+      background      : #fff;
+      border-bottom   : 1px solid #e2e8f0;
+      position        : sticky;
+      top             : 0;
+      z-index         : 1030;
+      box-shadow      : 0 1px 3px rgba(0,0,0,.06);
+    }
+
+    .navbar-brand-text {
+      font-weight     : 700;
+      font-size       : 1.2rem;
+      color           : var(--primary) !important;
+      letter-spacing  : -.3px;
+    }
+
+    .nav-link {
+      font-weight     : 500;
+      font-size       : .9rem;
+      color           : #475569 !important;
+      padding         : .45rem .85rem !important;
+      border-radius   : 6px;
+      transition      : background .15s, color .15s;
+    }
+    .nav-link:hover,
+    .nav-link.active { background: var(--primary-light); color: var(--primary) !important; }
+
+    /* ── Sidebar (authenticated pages) ──────────────── */
+    .sidebar {
+      width           : var(--sidebar-w);
+      min-height      : calc(100vh - var(--navbar-h));
+      background      : #fff;
+      border-right    : 1px solid #e2e8f0;
+      position        : fixed;
+      top             : var(--navbar-h);
+      left            : 0;
+      overflow-y      : auto;
+      transition      : transform .25s ease;
+      z-index         : 1020;
+    }
+
+    .sidebar-link {
+      display         : flex;
+      align-items     : center;
+      gap             : .65rem;
+      padding         : .65rem 1.25rem;
+      font-size       : .88rem;
+      font-weight     : 500;
+      color           : #475569;
+      border-radius   : 8px;
+      margin          : 2px 10px;
+      text-decoration : none;
+      transition      : background .15s, color .15s;
+    }
+    .sidebar-link:hover,
+    .sidebar-link.active {
+      background      : var(--primary-light);
+      color           : var(--primary);
+    }
+    .sidebar-link i { font-size: 1.05rem; }
+
+    /* ── Main content area ───────────────────────────── */
+    .main-content {
+      margin-left     : var(--sidebar-w);
+      padding         : 2rem;
+      min-height      : calc(100vh - var(--navbar-h));
+    }
+
+    /* ── No-sidebar pages (login, register, etc.) ────── */
+    .auth-wrapper { margin-left: 0 !important; }
+
+    /* ── Cards ───────────────────────────────────────── */
+    .card {
+      border          : 1px solid #e2e8f0;
+      border-radius   : 14px;
+      box-shadow      : 0 1px 4px rgba(0,0,0,.05);
+    }
+
+    /* ── Buttons ─────────────────────────────────────── */
+    .btn-primary {
+      background      : var(--primary);
+      border-color    : var(--primary);
+      font-weight     : 600;
+    }
+    .btn-primary:hover {
+      background      : var(--primary-dark);
+      border-color    : var(--primary-dark);
+    }
+
+    /* ── Toast / Alert box ───────────────────────────── */
+    #global-toast {
+      position        : fixed;
+      top             : 80px;
+      right           : 20px;
+      z-index         : 9999;
+      min-width       : 280px;
+    }
+
+    /* ── AJAX spinner overlay ────────────────────────── */
+    #page-spinner {
+      display         : none;
+      position        : fixed;
+      inset           : 0;
+      background      : rgba(255,255,255,.55);
+      z-index         : 9998;
+      align-items     : center;
+      justify-content : center;
+    }
+    #page-spinner.show { display: flex; }
+
+    /* ── Responsive sidebar collapse ─────────────────── */
+    @media (max-width: 991.98px) {
+      .sidebar       { transform: translateX(-100%); }
+      .sidebar.open  { transform: translateX(0); }
+      .main-content  { margin-left: 0; }
+    }
+  </style>
+
+  {% block extra_css %}{% endblock %}
+</head>
+
+<body>
+
+  <!-- ════════════════════════════════════════════════════════
+       NAVBAR
+  ════════════════════════════════════════════════════════ -->
+  {% include 'navbar.html' %}
+
+  <!-- ════════════════════════════════════════════════════════
+       GLOBAL TOAST
+  ════════════════════════════════════════════════════════ -->
+  <div id="global-toast"></div>
+
+  <!-- ════════════════════════════════════════════════════════
+       PAGE SPINNER
+  ════════════════════════════════════════════════════════ -->
+  <div id="page-spinner">
+    <div class="spinner-border text-primary" style="width:3rem;height:3rem;" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════
+       LAYOUT WRAPPER
+  ════════════════════════════════════════════════════════ -->
+  <div class="d-flex">
+
+    <!-- Sidebar — only shown for logged-in users -->
+    {% if request.user.is_authenticated %}
+      {% include 'partial/sidebar.html' %}
+    {% endif %}
+
+    <!-- Main Content -->
+    <main class="{% if request.user.is_authenticated %}main-content{% else %}auth-wrapper w-100{% endif %}">
+      {% block content %}{% endblock %}
+    </main>
+
+  </div><!-- /d-flex -->
+
+
+  <!-- ════════════════════════════════════════════════════════
+       SCRIPTS
+  ════════════════════════════════════════════════════════ -->
+
+  <!-- jQuery (MUST come before Bootstrap JS) -->
+  <script
+    src="https://code.jquery.com/jquery-3.7.1.min.js"
+    integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
+    crossorigin="anonymous">
+  </script>
+
+  <!-- Bootstrap 5 JS Bundle (Popper included) -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-YvpcrYf0tY3lHB60NNkmXc4s9bIOgUxi8T/jzmHoKU7aXoqUB27YFsy6s+Op27WJ"
+    crossorigin="anonymous">
+  </script>
+
+  <!-- ── Global AJAX Helpers ─────────────────────────────── -->
+  <script>
+    // ── CSRF token for all AJAX calls ─────────────────────
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        document.cookie.split(';').forEach(cookie => {
+          cookie = cookie.trim();
+          if (cookie.startsWith(name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          }
+        });
+      }
+      return cookieValue;
+    }
+
+    // Set CSRF header on every jQuery AJAX request automatically
+    $.ajaxSetup({
+      beforeSend: function(xhr, settings) {
+        if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(settings.type.toUpperCase())) {
+          xhr.setRequestHeader('X-CSRFToken', getCookie('csrftoken'));
+        }
+      }
+    });
+
+    // ── Show global toast notification ────────────────────
+    function showToast(message, type = 'success') {
+      const color = type === 'success' ? 'bg-success' :
+                    type === 'error'   ? 'bg-danger'  :
+                    type === 'warning' ? 'bg-warning text-dark' : 'bg-info';
+
+      const id   = 'toast-' + Date.now();
+      const html = `
+        <div id="${id}" class="toast align-items-center text-white ${color} border-0 mb-2 show"
+             role="alert" aria-live="assertive" aria-atomic="true">
+          <div class="d-flex">
+            <div class="toast-body fw-medium">${message}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                    onclick="document.getElementById('${id}').remove()"></button>
+          </div>
+        </div>`;
+
+      $('#global-toast').append(html);
+      setTimeout(() => $(`#${id}`).fadeOut(400, function(){ $(this).remove(); }), 4000);
+    }
+
+    // ── Spinner helpers ────────────────────────────────────
+    function showSpinner() { $('#page-spinner').addClass('show'); }
+    function hideSpinner() { $('#page-spinner').removeClass('show'); }
+
+    // ── Generic AJAX form submit helper ───────────────────
+    // Usage: ajaxSubmit(formEl, url, onSuccess)
+    function ajaxSubmit(formEl, url, onSuccess) {
+      const $btn  = $(formEl).find('[type="submit"]');
+      const origText = $btn.text();
+
+      $btn.prop('disabled', true).html(
+        '<span class="spinner-border spinner-border-sm me-1"></span> Please wait...'
+      );
+
+      $.ajax({
+        url        : url,
+        method     : 'POST',
+        data       : new FormData(formEl),
+        processData: false,
+        contentType: false,
+        success: function(data) {
+          if (typeof onSuccess === 'function') onSuccess(data);
+        },
+        error: function(xhr) {
+          let msg = 'Something went wrong. Please try again.';
+          try { msg = JSON.parse(xhr.responseText).error || msg; } catch(e) {}
+          showToast(msg, 'error');
+        },
+        complete: function() {
+          $btn.prop('disabled', false).text(origText);
+        }
+      });
+    }
+
+    // ── Mobile sidebar toggle ──────────────────────────────
+    $('#sidebar-toggle').on('click', function () {
+      $('.sidebar').toggleClass('open');
+    });
+
+    // Close sidebar on outside click (mobile)
+    $(document).on('click', function(e) {
+      if ($(window).width() < 992) {
+        if (!$(e.target).closest('.sidebar, #sidebar-toggle').length) {
+          $('.sidebar').removeClass('open');
+        }
+      }
+    });
+  </script>
+
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

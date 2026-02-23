@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     
     # My apps
     'accounts.apps.AccountsConfig',
+    'budget.apps.BudgetConfig',
     'expenses.apps.ExpensesConfig',
     'userSettings.apps.UsersettingsConfig',
     'dashboard.apps.DashboardConfig',

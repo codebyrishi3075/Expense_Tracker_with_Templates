@@ -1,0 +1,330 @@
+{% extends 'base.html' %}
+{% block title %}My Expenses - FinPocket{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+  <!-- ── Page Header ──────────────────────────────────────── -->
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+      <h2 class="fw-bold mb-0">My Expenses</h2>
+      <p class="text-muted mb-0" style="font-size:.88rem;">
+        Total: <strong class="text-dark">₹{{ total_amount }}</strong>
+        &nbsp;|&nbsp; {{ paginator.count }} record(s)
+      </p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{% url 'expenses:add' %}" class="btn btn-primary fw-semibold">
+        <i class="bi bi-plus-circle me-1"></i>Add Expense
+      </a>
+      <a href="{% url 'expenses:export_pdf' %}{% if from_date %}?from={{ from_date }}&to={{ to_date }}{% endif %}"
+         class="btn btn-outline-danger fw-semibold">
+        <i class="bi bi-file-pdf me-1"></i>Export PDF
+      </a>
+    </div>
+  </div>
+
+  <!-- ── Filter Card ──────────────────────────────────────── -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <form id="filter-form" class="row g-3 align-items-end">
+
+        <!-- Search -->
+        <div class="col-md-3">
+          <label class="form-label fw-medium" style="font-size:.82rem;">Search</label>
+          <input type="text" name="search" value="{{ search }}"
+                 placeholder="Notes or category..."
+                 class="form-control form-control-sm" />
+        </div>
+
+        <!-- Category -->
+        <div class="col-md-2">
+          <label class="form-label fw-medium" style="font-size:.82rem;">Category</label>
+          <select name="category" class="form-select form-select-sm">
+            <option value="">All Categories</option>
+            {% for cat in categories %}
+              <option value="{{ cat.id }}" {% if category_id == cat.id|stringformat:"s" %}selected{% endif %}>
+                {{ cat.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- From Date -->
+        <div class="col-md-2">
+          <label class="form-label fw-medium" style="font-size:.82rem;">From</label>
+          <input type="date" name="from" value="{{ from_date }}" class="form-control form-control-sm" />
+        </div>
+
+        <!-- To Date -->
+        <div class="col-md-2">
+          <label class="form-label fw-medium" style="font-size:.82rem;">To</label>
+          <input type="date" name="to" value="{{ to_date }}" class="form-control form-control-sm" />
+        </div>
+
+        <!-- Sort -->
+        <div class="col-md-2">
+          <label class="form-label fw-medium" style="font-size:.82rem;">Sort By</label>
+          <select name="sort_by" class="form-select form-select-sm">
+            <option value="-date"       {% if sort_by == '-date'       %}selected{% endif %}>Date (Newest)</option>
+            <option value="date"        {% if sort_by == 'date'        %}selected{% endif %}>Date (Oldest)</option>
+            <option value="-amount"     {% if sort_by == '-amount'     %}selected{% endif %}>Amount (High)</option>
+            <option value="amount"      {% if sort_by == 'amount'      %}selected{% endif %}>Amount (Low)</option>
+            <option value="-created_at" {% if sort_by == '-created_at' %}selected{% endif %}>Newest Added</option>
+          </select>
+        </div>
+
+        <!-- Buttons -->
+        <div class="col-md-1 d-flex gap-2">
+          <button type="submit" class="btn btn-primary btn-sm px-3">
+            <i class="bi bi-search"></i>
+          </button>
+          <a href="{% url 'expenses:list' %}" class="btn btn-outline-secondary btn-sm px-2" title="Clear filters">
+            <i class="bi bi-x-lg"></i>
+          </a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Expenses Table ───────────────────────────────────── -->
+  <div class="card">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="font-size:.82rem;">#</th>
+              <th style="font-size:.82rem;">Date</th>
+              <th style="font-size:.82rem;">Category</th>
+              <th style="font-size:.82rem;">Amount</th>
+              <th style="font-size:.82rem;">Type</th>
+              <th style="font-size:.82rem;">Recurring</th>
+              <th style="font-size:.82rem;">Notes</th>
+              <th style="font-size:.82rem;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="expense-tbody">
+            {% for expense in expenses %}
+            <tr id="row-{{ expense.id }}">
+              <td class="text-muted" style="font-size:.82rem;">{{ forloop.counter }}</td>
+              <td style="font-size:.85rem;">{{ expense.date }}</td>
+              <td>
+                <span class="badge rounded-pill" style="background:#eef2ff; color:#4f46e5; font-size:.78rem;">
+                  {{ expense.category.name|default:"Uncategorized" }}
+                </span>
+              </td>
+              <td class="fw-semibold" style="font-size:.9rem; color:#16a34a;">
+                ₹{{ expense.amount }}
+              </td>
+              <td>
+                <span class="badge {% if expense.expense_type == 'fixed' %}bg-warning text-dark{% else %}bg-info text-dark{% endif %}"
+                      style="font-size:.75rem;">
+                  {{ expense.expense_type|capfirst }}
+                </span>
+              </td>
+              <td>
+                {% if expense.is_recurring %}
+                  <span class="badge bg-success bg-opacity-10 text-success" style="font-size:.75rem;">
+                    <i class="bi bi-arrow-repeat"></i> Yes
+                  </span>
+                {% else %}
+                  <span class="text-muted" style="font-size:.8rem;">—</span>
+                {% endif %}
+              </td>
+              <td class="text-muted" style="font-size:.82rem; max-width:150px;">
+                <span class="text-truncate d-inline-block" style="max-width:140px;" title="{{ expense.notes }}">
+                  {{ expense.notes|default:"—" }}
+                </span>
+              </td>
+              <td>
+                <div class="d-flex gap-1">
+                  <!-- View detail -->
+                  <button class="btn btn-sm btn-outline-secondary btn-view-detail"
+                          data-id="{{ expense.id }}" title="View">
+                    <i class="bi bi-eye" style="font-size:.8rem;"></i>
+                  </button>
+                  <!-- Edit -->
+                  <a href="{% url 'expenses:edit' expense.id %}"
+                     class="btn btn-sm btn-outline-primary" title="Edit">
+                    <i class="bi bi-pencil" style="font-size:.8rem;"></i>
+                  </a>
+                  <!-- Delete -->
+                  <button class="btn btn-sm btn-outline-danger btn-delete"
+                          data-id="{{ expense.id }}" title="Delete">
+                    <i class="bi bi-trash" style="font-size:.8rem;"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="8" class="text-center py-5 text-muted">
+                <i class="bi bi-receipt fs-1 d-block mb-2 opacity-25"></i>
+                No expenses found.
+                <a href="{% url 'expenses:add' %}" class="text-primary fw-semibold">Add your first one →</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Pagination ─────────────────────────────────────── -->
+    {% if paginator.num_pages > 1 %}
+    <div class="card-footer bg-white border-top">
+      <nav class="d-flex justify-content-between align-items-center">
+        <small class="text-muted">
+          Page {{ expenses.number }} of {{ paginator.num_pages }}
+        </small>
+        <ul class="pagination pagination-sm mb-0">
+          {% if expenses.has_previous %}
+          <li class="page-item">
+            <a class="page-link" href="?page={{ expenses.previous_page_number }}&search={{ search }}&category={{ category_id }}&from={{ from_date }}&to={{ to_date }}&sort_by={{ sort_by }}">
+              <i class="bi bi-chevron-left"></i>
+            </a>
+          </li>
+          {% endif %}
+
+          {% for num in paginator.page_range %}
+            {% if num == expenses.number %}
+              <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+            {% elif num >= expenses.number|add:"-2" and num <= expenses.number|add:"2" %}
+              <li class="page-item">
+                <a class="page-link" href="?page={{ num }}&search={{ search }}&category={{ category_id }}&from={{ from_date }}&to={{ to_date }}&sort_by={{ sort_by }}">{{ num }}</a>
+              </li>
+            {% endif %}
+          {% endfor %}
+
+          {% if expenses.has_next %}
+          <li class="page-item">
+            <a class="page-link" href="?page={{ expenses.next_page_number }}&search={{ search }}&category={{ category_id }}&from={{ from_date }}&to={{ to_date }}&sort_by={{ sort_by }}">
+              <i class="bi bi-chevron-right"></i>
+            </a>
+          </li>
+          {% endif %}
+        </ul>
+      </nav>
+    </div>
+    {% endif %}
+
+  </div><!-- /card -->
+</div>
+
+<!-- ── Detail Modal ──────────────────────────────────────── -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rounded-4 border-0 shadow">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold">Expense Detail</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="detail-modal-body">
+        <div class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Delete Confirm Modal ──────────────────────────────── -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content rounded-4 border-0 shadow">
+      <div class="modal-body text-center py-4">
+        <i class="bi bi-exclamation-triangle-fill text-danger fs-1 mb-3 d-block"></i>
+        <h6 class="fw-bold mb-1">Delete Expense?</h6>
+        <p class="text-muted mb-4" style="font-size:.85rem;">This action cannot be undone.</p>
+        <div class="d-flex gap-2 justify-content-center">
+          <button class="btn btn-outline-secondary btn-sm px-4" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-danger btn-sm px-4 fw-semibold" id="confirm-delete-btn">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+$(function () {
+  const detailModal = new bootstrap.Modal('#detailModal');
+  const deleteModal = new bootstrap.Modal('#deleteModal');
+  let deleteId = null;
+  const csrfToken = $('[name=csrfmiddlewaretoken]').val() || getCookie('csrftoken');
+
+  // ── View Detail ─────────────────────────────────────────
+  $(document).on('click', '.btn-view-detail', function () {
+    const id = $(this).data('id');
+    $('#detail-modal-body').html('<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>');
+    detailModal.show();
+
+    $.ajax({
+      url     : `/expenses/${id}/`,
+      headers : { 'X-Requested-With': 'XMLHttpRequest' },
+      success : function(data) {
+        const e = data.data;
+        $('#detail-modal-body').html(`
+          <div class="row g-3">
+            <div class="col-6"><small class="text-muted">Date</small><p class="fw-semibold mb-0">${e.date}</p></div>
+            <div class="col-6"><small class="text-muted">Amount</small><p class="fw-semibold mb-0 text-success">₹${e.amount}</p></div>
+            <div class="col-6"><small class="text-muted">Category</small><p class="fw-semibold mb-0">${e.category_name}</p></div>
+            <div class="col-6"><small class="text-muted">Type</small><p class="fw-semibold mb-0">${e.expense_type}</p></div>
+            <div class="col-6"><small class="text-muted">Recurring</small><p class="fw-semibold mb-0">${e.is_recurring ? 'Yes' : 'No'}</p></div>
+            <div class="col-6"><small class="text-muted">Auto Pay</small><p class="fw-semibold mb-0">${e.auto_pay ? 'Yes' : 'No'}</p></div>
+            ${e.due_date ? `<div class="col-6"><small class="text-muted">Due Date</small><p class="fw-semibold mb-0">${e.due_date}</p></div>` : ''}
+            <div class="col-12"><small class="text-muted">Notes</small><p class="fw-semibold mb-0">${e.notes || '—'}</p></div>
+            <div class="col-12 mt-2 d-flex gap-2">
+              <a href="/expenses/edit/${e.id}/" class="btn btn-primary btn-sm flex-fill">
+                <i class="bi bi-pencil me-1"></i>Edit
+              </a>
+            </div>
+          </div>`);
+      },
+      error: function() { $('#detail-modal-body').html('<p class="text-danger text-center">Failed to load details.</p>'); }
+    });
+  });
+
+  // ── Delete ───────────────────────────────────────────────
+  $(document).on('click', '.btn-delete', function () {
+    deleteId = $(this).data('id');
+    deleteModal.show();
+  });
+
+  $('#confirm-delete-btn').on('click', function () {
+    if (!deleteId) return;
+    const btn = $(this);
+    btn.prop('disabled', true).text('Deleting...');
+
+    $.ajax({
+      url    : `/expenses/delete/${deleteId}/`,
+      method : 'POST',
+      data   : { csrfmiddlewaretoken: csrfToken },
+      success: function(data) {
+        deleteModal.hide();
+        $(`#row-${deleteId}`).fadeOut(300, function(){ $(this).remove(); });
+        showToast(data.message, 'success');
+        deleteId = null;
+      },
+      error  : function(xhr) {
+        let msg = 'Delete failed.';
+        try { msg = JSON.parse(xhr.responseText).error; } catch(e) {}
+        showToast(msg, 'error');
+      },
+      complete: function() { btn.prop('disabled', false).text('Delete'); }
+    });
+  });
+
+  // ── Filter form submit ───────────────────────────────────
+  $('#filter-form').on('submit', function(e) {
+    e.preventDefault();
+    const params = $(this).serialize();
+    window.location.href = `{% url 'expenses:list' %}?${params}`;
+  });
+});
+</script>
+{% endblock %}

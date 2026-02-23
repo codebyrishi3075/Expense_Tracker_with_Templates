@@ -1,14 +1,16 @@
 from django.contrib import admin
 from django.urls import path, include
+from proj_expense_tracker import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('',          views.homepage, name='home'),
     path('accounts/', include('accounts.urls')),
     path('expenses/', include('expenses.urls')),
     path('budget/', include('budget.urls')),
-    path('dashboard/', include('dashboard.urls')),
-    path('contact_app/', include('contact_app.urls')),
-    path('userSettings/', include('userSettings.urls')),
+    # path('dashboard/', include('dashboard.urls')),
+    # path('contact_app/', include('contact_app.urls')),
+    # path('userSettings/', include('userSettings.urls')),
 ]
 
 

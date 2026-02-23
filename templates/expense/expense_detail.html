@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}Expense Detail - FinPocket{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 600px;">
+
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'expenses:list' %}">Expenses</a></li>
+      <li class="breadcrumb-item active">Detail</li>
+    </ol>
+  </nav>
+
+  <div class="card shadow-sm rounded-4">
+    <div class="card-body p-4">
+
+      <!-- Amount Hero -->
+      <div class="text-center mb-4">
+        <p class="text-muted mb-1" style="font-size:.85rem;">Amount</p>
+        <h1 class="fw-bold" style="color:#16a34a; font-size:2.5rem;">₹{{ expense.amount }}</h1>
+        <span class="badge rounded-pill px-3 py-2"
+              style="background:#eef2ff; color:#4f46e5;">
+          {{ expense.category.name|default:"Uncategorized" }}
+        </span>
+      </div>
+
+      <hr>
+
+      <!-- Details Grid -->
+      <div class="row g-3">
+        <div class="col-6">
+          <small class="text-muted d-block">Date</small>
+          <strong>{{ expense.date }}</strong>
+        </div>
+        <div class="col-6">
+          <small class="text-muted d-block">Expense Type</small>
+          <span class="badge {% if expense.expense_type == 'fixed' %}bg-warning text-dark{% else %}bg-info text-dark{% endif %}">
+            {{ expense.expense_type|capfirst }}
+          </span>
+        </div>
+        <div class="col-6">
+          <small class="text-muted d-block">Recurring</small>
+          <strong>{% if expense.is_recurring %}Yes{% else %}No{% endif %}</strong>
+        </div>
+        {% if expense.is_recurring %}
+        <div class="col-6">
+          <small class="text-muted d-block">Due Date</small>
+          <strong>{{ expense.due_date|default:"—" }}</strong>
+        </div>
+        <div class="col-6">
+          <small class="text-muted d-block">Auto Pay</small>
+          <strong>{% if expense.auto_pay %}Yes{% else %}No{% endif %}</strong>
+        </div>
+        {% endif %}
+        <div class="col-12">
+          <small class="text-muted d-block">Notes</small>
+          <strong>{{ expense.notes|default:"—" }}</strong>
+        </div>
+        <div class="col-12">
+          <small class="text-muted d-block">Added On</small>
+          <strong>{{ expense.created_at|date:"d M Y, h:i A" }}</strong>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="d-flex gap-3 mt-4">
+        <a href="{% url 'expenses:edit' expense.id %}"
+           class="btn btn-primary fw-semibold flex-fill">
+          <i class="bi bi-pencil me-1"></i>Edit
+        </a>
+        <a href="{% url 'expenses:list' %}"
+           class="btn btn-outline-secondary fw-semibold flex-fill">
+          <i class="bi bi-arrow-left me-1"></i>Back
+        </a>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,85 @@
+<!-- Sidebar — shown only for authenticated users, included in base.html -->
+<aside class="sidebar d-flex flex-column py-3" id="appSidebar">
+
+  <!-- ── User Info Card ──────────────────────────── -->
+  <div class="px-3 mb-3">
+    <div class="d-flex align-items-center gap-3 p-3 rounded-3" style="background:#f8fafc;">
+
+      <!-- Avatar -->
+      <div class="d-flex align-items-center justify-content-center rounded-circle bg-primary text-white fw-bold flex-shrink-0"
+           style="width:42px;height:42px;font-size:1rem;">
+        {{ request.user.first_name|first|upper|default:request.user.username|first|upper }}
+      </div>
+
+      <div class="overflow-hidden">
+        <p class="fw-semibold mb-0 text-truncate" style="font-size:.88rem;">
+          {{ request.user.first_name }} {{ request.user.last_name }}
+        </p>
+        <p class="text-muted mb-0 text-truncate" style="font-size:.75rem;">{{ request.user.email }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Nav Links ───────────────────────────────── -->
+  <nav class="flex-grow-1 px-1">
+
+    <p class="px-3 text-uppercase text-muted fw-semibold mb-1" style="font-size:.68rem;letter-spacing:.08em;">
+      Main Menu
+    </p>
+
+    <a href="{% url 'accounts:dashboard' %}"
+       class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+      <i class="bi bi-speedometer2"></i>
+      <span>Dashboard</span>
+    </a>
+
+    <a href="/expenses/"
+       class="sidebar-link {% if 'expense' in request.resolver_match.url_name|default:'' %}active{% endif %}">
+      <i class="bi bi-receipt-cutoff"></i>
+      <span>Expenses</span>
+    </a>
+
+    <a href="/budget/"
+       class="sidebar-link {% if 'budget' in request.resolver_match.url_name|default:'' %}active{% endif %}">
+      <i class="bi bi-pie-chart-fill"></i>
+      <span>Budget</span>
+    </a>
+
+    <!-- Divider -->
+    <hr class="mx-3 my-2 border-light">
+
+    <p class="px-3 text-uppercase text-muted fw-semibold mb-1" style="font-size:.68rem;letter-spacing:.08em;">
+      Account
+    </p>
+
+    <a href="{% url 'accounts:profile' %}"
+       class="sidebar-link {% if request.resolver_match.url_name == 'profile' %}active{% endif %}">
+      <i class="bi bi-person-circle"></i>
+      <span>My Profile</span>
+    </a>
+
+    <a href="/user-settings/"
+       class="sidebar-link {% if 'settings' in request.resolver_match.url_name|default:'' %}active{% endif %}">
+      <i class="bi bi-gear"></i>
+      <span>Settings</span>
+    </a>
+
+    <a href="/contact/"
+       class="sidebar-link {% if 'contact' in request.resolver_match.url_name|default:'' %}active{% endif %}">
+      <i class="bi bi-envelope"></i>
+      <span>Contact Us</span>
+    </a>
+
+  </nav>
+
+  <!-- ── Logout Button at bottom ─────────────────── -->
+  <div class="px-3 mt-auto pt-3 border-top">
+    <a href="{% url 'accounts:logoutUser' %}"
+       class="sidebar-link text-danger"
+       style="margin:0;padding:.65rem 1rem;">
+      <i class="bi bi-box-arrow-right"></i>
+      <span>Logout</span>
+    </a>
+  </div>
+
+</aside>
