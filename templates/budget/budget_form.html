@@ -24,7 +24,7 @@
 
   <div class="card shadow-sm">
     <div class="card-body p-4">
-      <form id="budget-form" novalidate>
+      <form id="budget-form" method="POST" novalidate>
         {% csrf_token %}
 
         <div class="row g-3">

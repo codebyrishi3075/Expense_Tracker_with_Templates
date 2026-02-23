@@ -25,7 +25,7 @@
 
           <div id="form-msg" class="alert d-none mb-3"></div>
 
-          <form id="add-category-form" novalidate>
+          <form id="add-category-form" method="POST" action="{% url 'budget:categories' %}" novalidate>
             {% csrf_token %}
             <div class="mb-3">
               <label class="form-label fw-semibold">Category Name <span class="text-danger">*</span></label>
