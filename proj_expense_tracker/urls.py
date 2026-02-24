@@ -8,9 +8,9 @@ urlpatterns = [
     path('accounts/', include('accounts.urls')),
     path('expenses/', include('expenses.urls')),
     path('budget/', include('budget.urls')),
-    # path('dashboard/', include('dashboard.urls')),
-    # path('contact_app/', include('contact_app.urls')),
-    # path('userSettings/', include('userSettings.urls')),
+    path('dashboard/', include('dashboard.urls')),
+    path('contact/', include('contact_app.urls')),
+    path('user-settings/', include('userSettings.urls')),
 ]
 
 

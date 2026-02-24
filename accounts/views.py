@@ -14,22 +14,12 @@ from .authentication import create_access_token, create_refresh_token
 from .decorators import jwt_required
 
 
-# ─────────────────────────────────────────────────────────────
-# HELPER — Generate OTP
-# ─────────────────────────────────────────────────────────────
 def generate_otp():
     return str(random.randint(100000, 999999))
 
 
-# ─────────────────────────────────────────────────────────────
-# HELPER — Send OTP Email
-# ─────────────────────────────────────────────────────────────
 def send_otp_email(user: User, purpose: str = 'register') -> None:
-    """Generate OTP, save to DB, send email. purpose: 'register' or 'reset'"""
-
-    # Delete old OTPs for same purpose
     EmailOTP.objects.filter(user=user, purpose=purpose).delete()
-
     otp = generate_otp()
     EmailOTP.objects.create(user=user, otp=otp, purpose=purpose)
 
@@ -57,9 +47,9 @@ def send_otp_email(user: User, purpose: str = 'register') -> None:
     send_mail(subject, message, settings.EMAIL_HOST_USER, [user.email], fail_silently=False)
 
 
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
 # REGISTER
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
 def register_view(request: HttpRequest) -> HttpResponse:
     if request.method == 'GET':
         return render(request, 'accounts/register.html')
@@ -74,7 +64,6 @@ def register_view(request: HttpRequest) -> HttpResponse:
             password         = request.POST.get("password", '')
             confirm_password = request.POST.get("confirm_password", '')
 
-            # Validations
             if not all([first_name, last_name, email, password, confirm_password, phone_number]):
                 return JsonResponse({'error': 'All fields are required!'}, status=400)
 
@@ -95,7 +84,6 @@ def register_view(request: HttpRequest) -> HttpResponse:
             if len(password) < 5:
                 return JsonResponse({'error': 'Password must be at least 5 characters.'}, status=400)
 
-            # Create inactive user
             user = User.objects.create_user(
                 first_name        = first_name,
                 last_name         = last_name,
@@ -103,7 +91,7 @@ def register_view(request: HttpRequest) -> HttpResponse:
                 email             = email,
                 phone_number      = phone_number,
                 password          = password,
-                is_active         = False,       # activate after email verify
+                is_active         = False,
                 is_email_verified = False,
             )
 
@@ -124,9 +112,9 @@ def register_view(request: HttpRequest) -> HttpResponse:
     return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
 
 
-# ═════════════════════════════════════════════════════════════
-# VERIFY OTP (Register + Password Reset both use this view)
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
+# VERIFY OTP
+# ═══════════════════════════════════
 def verify_otp_view(request: HttpRequest) -> HttpResponse:
     if request.method == 'GET':
         email   = request.GET.get('email', '')
@@ -160,7 +148,6 @@ def verify_otp_view(request: HttpRequest) -> HttpResponse:
             if otp_obj.is_expired():
                 return JsonResponse({'error': 'OTP has expired. Please request a new one.'}, status=400)
 
-            # Mark OTP used
             otp_obj.is_used = True
             otp_obj.save()
 
@@ -173,9 +160,7 @@ def verify_otp_view(request: HttpRequest) -> HttpResponse:
                     'message'      : 'Email verified successfully! You can now login.',
                     'redirect_url' : '/accounts/login/'
                 })
-
-            else:  # purpose == 'reset'
-                # OTP verified — redirect to password reset confirm page
+            else:
                 return JsonResponse({
                     'success'      : True,
                     'message'      : 'OTP verified. Please set your new password.',
@@ -188,9 +173,9 @@ def verify_otp_view(request: HttpRequest) -> HttpResponse:
     return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
 
 
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
 # RESEND OTP
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
 def resend_otp_view(request: HttpRequest) -> HttpResponse:
     if request.method == 'POST':
         try:
@@ -217,13 +202,13 @@ def resend_otp_view(request: HttpRequest) -> HttpResponse:
     return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
 
 
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
 # LOGIN
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
 def login_view(request: HttpRequest) -> HttpResponse:
     if request.method == 'GET':
         if request.COOKIES.get('access_token'):
-            return redirect('accounts:dashboard')
+            return redirect('dashboard:home')
         return render(request, 'accounts/login.html')
 
     elif request.method == 'POST':
@@ -254,7 +239,8 @@ def login_view(request: HttpRequest) -> HttpResponse:
                 expired_at = timezone.now() + timedelta(days=7)
             )
 
-            response = JsonResponse({"status": "success", "redirect_url": "/accounts/dashboard/"})
+            # ✅ FIX: redirect to /dashboard/ not /accounts/dashboard/
+            response = JsonResponse({"status": "success", "redirect_url": "/dashboard/"})
             response.set_cookie('access_token',  access_token,  httponly=True, secure=False, samesite='Lax', max_age=2400,       path='/')
             response.set_cookie('refresh_token', refresh_token, httponly=True, secure=False, samesite='Lax', max_age=7*24*60*60, path='/')
             return response
@@ -265,21 +251,22 @@ def login_view(request: HttpRequest) -> HttpResponse:
     return JsonResponse({'status': 'error', 'message': 'Invalid HTTP method'}, status=405)
 
 
-# ═════════════════════════════════════════════════════════════
-# DASHBOARD
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
+# DASHBOARD — ✅ FIX: redirect to dashboard app
+# ═══════════════════════════════════
 @jwt_required
 def dashboard_view(request):
-    context = {
-        'user'      : request.user,
-        'full_name' : f"{request.user.first_name} {request.user.last_name}".strip(),
-    }
-    return render(request, 'accounts/dashboard.html', context)
+    """
+    /accounts/dashboard/ → redirect to /dashboard/
+    Template accounts/dashboard.html exist nahi karta.
+    dashboard app ka template use hota hai.
+    """
+    return redirect('dashboard:home')
 
 
-# ═════════════════════════════════════════════════════════════
-# PROFILE — View & Update
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
+# PROFILE
+# ═══════════════════════════════════
 @jwt_required
 def profile_view(request):
     user = request.user
@@ -309,9 +296,9 @@ def profile_view(request):
     return render(request, 'accounts/profile.html', {'user': user})
 
 
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
 # UPLOAD PROFILE PICTURE
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
 @jwt_required
 def upload_avatar_view(request):
     if request.method == 'POST':
@@ -321,7 +308,6 @@ def upload_avatar_view(request):
             if not file:
                 return JsonResponse({'error': 'No file provided.'}, status=400)
 
-            # Validate file type
             allowed_types = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp']
             if file.content_type not in allowed_types:
                 return JsonResponse({'error': 'Only JPG, PNG, WEBP images allowed.'}, status=400)
@@ -342,9 +328,9 @@ def upload_avatar_view(request):
     return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
 
 
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
 # PASSWORD RESET — Step 1: Request OTP
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
 def password_reset_request_view(request: HttpRequest) -> HttpResponse:
     if request.method == 'GET':
         return render(request, 'accounts/password_reset_request.html')
@@ -375,9 +361,9 @@ def password_reset_request_view(request: HttpRequest) -> HttpResponse:
     return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
 
 
-# ═════════════════════════════════════════════════════════════
-# PASSWORD RESET — Step 2: Set New Password (after OTP verified)
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
+# PASSWORD RESET — Step 2: Confirm
+# ═══════════════════════════════════
 def password_reset_confirm_view(request: HttpRequest) -> HttpResponse:
     if request.method == 'GET':
         email = request.GET.get('email', '')
@@ -400,7 +386,6 @@ def password_reset_confirm_view(request: HttpRequest) -> HttpResponse:
             except User.DoesNotExist:
                 return JsonResponse({'error': 'Invalid email.'}, status=404)
 
-            # Django's built-in password validation
             try:
                 validate_password(new_password, user)
             except ValidationError as e:
@@ -421,9 +406,9 @@ def password_reset_confirm_view(request: HttpRequest) -> HttpResponse:
     return JsonResponse({'error': 'Invalid HTTP method'}, status=405)
 
 
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
 # LOGOUT
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════
 def logout_view(request):
     try:
         refresh_token = request.COOKIES.get('refresh_token')

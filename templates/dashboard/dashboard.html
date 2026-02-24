@@ -1,0 +1,566 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard - FinPocket{% endblock %}
+
+{% block extra_css %}
+<style>
+  .stat-card {
+    border-radius: 16px;
+    border: none;
+    box-shadow: 0 1px 6px rgba(0,0,0,.06);
+    transition: transform .15s;
+  }
+  .stat-card:hover { transform: translateY(-2px); }
+  .stat-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+  }
+  .grade-badge {
+    width: 64px; height: 64px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; font-weight: 800;
+  }
+  .cat-bar { height: 8px; border-radius: 99px; }
+  .recent-row:hover { background: #f8fafc; }
+</style>
+{% endblock %}
+
+
+{% block content %}
+<div class="container-fluid py-4">
+
+  <!-- ══════════════════════════════════════════════════════════
+       HEADER
+  ══════════════════════════════════════════════════════════ -->
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+    <div>
+      <h2 class="fw-bold mb-0">Dashboard</h2>
+      <p class="text-muted mb-0" style="font-size:.88rem;">
+        <i class="bi bi-calendar3 me-1"></i>
+        {{ current_month|date:"F Y" }}
+        {% if budget_status == 'over_budget' %}
+          <span class="badge bg-danger ms-2" style="font-size:.72rem;">Over Budget!</span>
+        {% else %}
+          <span class="badge bg-success ms-2" style="font-size:.72rem;">On Track ✓</span>
+        {% endif %}
+      </p>
+    </div>
+
+    <!-- Month picker -->
+    <div class="d-flex align-items-center gap-2">
+      <form id="month-form" class="d-flex gap-2">
+        <input type="month" id="month-picker" name="month"
+               value="{{ month_param }}"
+               class="form-control form-control-sm" style="width:160px;"
+               onchange="switchMonth(this.value)" />
+      </form>
+      <a href="{% url 'expenses:add' %}" class="btn btn-primary btn-sm fw-semibold">
+        <i class="bi bi-plus-circle me-1"></i>Add Expense
+      </a>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       ROW 1 — KEY METRIC CARDS
+  ══════════════════════════════════════════════════════════ -->
+  <div class="row g-3 mb-4">
+
+    <!-- Total Budget -->
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <p class="text-muted mb-1" style="font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em;">Budget</p>
+            <h4 class="fw-bold mb-0" id="card-budget">₹{{ total_budget }}</h4>
+          </div>
+          <div class="stat-icon" style="background:#eef2ff;">💰</div>
+        </div>
+        <p class="text-muted mt-2 mb-0" style="font-size:.78rem;">{{ current_month|date:"F Y" }}</p>
+      </div>
+    </div>
+
+    <!-- Total Spent -->
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <p class="text-muted mb-1" style="font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em;">Spent</p>
+            <h4 class="fw-bold mb-0 text-danger" id="card-spent">₹{{ total_expenses }}</h4>
+          </div>
+          <div class="stat-icon" style="background:#fef2f2;">💸</div>
+        </div>
+        <p class="text-muted mt-2 mb-0" style="font-size:.78rem;">{{ expense_count }} transaction(s)</p>
+      </div>
+    </div>
+
+    <!-- Remaining -->
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <p class="text-muted mb-1" style="font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em;">Remaining</p>
+            <h4 class="fw-bold mb-0 {% if remaining < 0 %}text-danger{% else %}text-success{% endif %}" id="card-remaining">
+              ₹{{ remaining }}
+            </h4>
+          </div>
+          <div class="stat-icon" style="background:#f0fdf4;">🏦</div>
+        </div>
+        <!-- Utilization progress -->
+        <div class="progress mt-2" style="height:5px; border-radius:99px;">
+          <div class="progress-bar {% if utilization_percent >= 100 %}bg-danger{% elif utilization_percent >= 75 %}bg-warning{% else %}bg-success{% endif %}"
+               style="width:{% if utilization_percent > 100 %}100{% else %}{{ utilization_percent }}{% endif %}%; border-radius:99px;">
+          </div>
+        </div>
+        <p class="text-muted mt-1 mb-0" style="font-size:.75rem;">{{ utilization_percent }}% used</p>
+      </div>
+    </div>
+
+    <!-- Avg Per Day -->
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <p class="text-muted mb-1" style="font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em;">Daily Avg</p>
+            <h4 class="fw-bold mb-0">₹{{ avg_per_day }}</h4>
+          </div>
+          <div class="stat-icon" style="background:#fff7ed;">📅</div>
+        </div>
+        <p class="text-muted mt-2 mb-0" style="font-size:.78rem;">
+          {% if month_trend == 'increased' %}
+            <span class="text-danger"><i class="bi bi-arrow-up-short"></i>{{ month_pct_change }}% vs last month</span>
+          {% elif month_trend == 'decreased' %}
+            <span class="text-success"><i class="bi bi-arrow-down-short"></i>{{ month_pct_change|stringformat:".2f" }}% vs last month</span>
+          {% else %}
+            Same as last month
+          {% endif %}
+        </p>
+      </div>
+    </div>
+
+  </div><!-- /row 1 -->
+
+  <!-- ══════════════════════════════════════════════════════════
+       ROW 2 — CHARTS
+  ══════════════════════════════════════════════════════════ -->
+  <div class="row g-3 mb-4">
+
+    <!-- Spending Trends Line Chart -->
+    <div class="col-lg-8">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-bold mb-0">Spending Trends</h6>
+            <div class="btn-group btn-group-sm" role="group">
+              <button type="button" class="btn btn-outline-primary active" onclick="loadTrends('monthly')">Monthly</button>
+              <button type="button" class="btn btn-outline-primary" onclick="loadTrends('weekly')">Weekly</button>
+            </div>
+          </div>
+          <canvas id="trendsChart" height="100"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Category Donut Chart -->
+    <div class="col-lg-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h6 class="fw-bold mb-3">Category Breakdown</h6>
+          <canvas id="categoryChart" height="180"></canvas>
+          <div id="chart-legend" class="mt-3"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row 2 -->
+
+  <!-- ══════════════════════════════════════════════════════════
+       ROW 3 — BUDGET ADHERENCE + MONTH COMPARISON + TOP CATS
+  ══════════════════════════════════════════════════════════ -->
+  <div class="row g-3 mb-4">
+
+    <!-- Budget Adherence Score -->
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body p-4">
+          <h6 class="fw-bold mb-4">Budget Adherence</h6>
+          <div class="d-flex align-items-center gap-3 mb-4">
+            <div class="grade-badge
+              {% if overall_score >= 80 %}bg-success text-white
+              {% elif overall_score >= 60 %}bg-warning text-dark
+              {% else %}bg-danger text-white{% endif %}">
+              {{ grade }}
+            </div>
+            <div>
+              <h3 class="fw-bold mb-0">{{ overall_score }}<small class="fs-6 text-muted fw-normal">/100</small></h3>
+              <p class="text-muted mb-0" style="font-size:.8rem;">Overall Score</p>
+            </div>
+          </div>
+          <!-- Score bar -->
+          <div class="progress mb-3" style="height:10px; border-radius:99px;">
+            <div class="progress-bar
+              {% if overall_score >= 80 %}bg-success{% elif overall_score >= 60 %}bg-warning{% else %}bg-danger{% endif %}"
+              style="width:{{ overall_score }}%; border-radius:99px;"></div>
+          </div>
+          <p class="text-muted" style="font-size:.8rem;">
+            {% if grade == 'A+' or grade == 'A' %}🎉 Excellent! You're managing finances well.
+            {% elif grade == 'B' %}👍 Good! Minor improvements needed.
+            {% elif grade == 'C' %}⚠️ Fair. Try to reduce spending.
+            {% else %}🚨 Critical. Overspending detected!{% endif %}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Month Comparison -->
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body p-4">
+          <h6 class="fw-bold mb-4">Month Comparison</h6>
+
+          <div class="d-flex justify-content-between mb-3">
+            <div>
+              <small class="text-muted d-block">{{ current_month|date:"M Y" }}</small>
+              <strong class="text-danger">₹{{ total_expenses }}</strong>
+            </div>
+            <div class="text-center">
+              {% if month_trend == 'increased' %}
+                <i class="bi bi-arrow-up-circle-fill text-danger fs-3"></i>
+                <p class="text-danger mb-0" style="font-size:.78rem;">+{{ month_pct_change }}%</p>
+              {% elif month_trend == 'decreased' %}
+                <i class="bi bi-arrow-down-circle-fill text-success fs-3"></i>
+                <p class="text-success mb-0" style="font-size:.78rem;">-{{ month_pct_change|stringformat:".2f" }}%</p>
+              {% else %}
+                <i class="bi bi-dash-circle-fill text-muted fs-3"></i>
+                <p class="text-muted mb-0" style="font-size:.78rem;">No change</p>
+              {% endif %}
+            </div>
+            <div class="text-end">
+              <small class="text-muted d-block">{{ previous_month|date:"M Y" }}</small>
+              <strong>₹{{ prev_total }}</strong>
+            </div>
+          </div>
+
+          <div class="p-3 rounded-3 {% if month_trend == 'increased' %}bg-danger bg-opacity-10{% else %}bg-success bg-opacity-10{% endif %}">
+            <p class="mb-0 fw-semibold" style="font-size:.84rem;">
+              {% if month_trend == 'increased' %}
+                <i class="bi bi-exclamation-triangle me-1 text-danger"></i>
+                Spending up by ₹{{ month_diff }} this month.
+              {% elif month_trend == 'decreased' %}
+                <i class="bi bi-check-circle me-1 text-success"></i>
+                Saved ₹{{ month_diff|stringformat:".2f"|slice:"1:" }} compared to last month!
+              {% else %}
+                Spending same as last month.
+              {% endif %}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Expense Statistics -->
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body p-4">
+          <h6 class="fw-bold mb-3">Statistics</h6>
+          <div class="row g-2">
+            <div class="col-6">
+              <div class="p-2 rounded-3 bg-light text-center">
+                <small class="text-muted d-block" style="font-size:.72rem;">Transactions</small>
+                <strong>{{ stats_count }}</strong>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="p-2 rounded-3 bg-light text-center">
+                <small class="text-muted d-block" style="font-size:.72rem;">Avg/Transaction</small>
+                <strong>₹{{ stats_average }}</strong>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="p-2 rounded-3 bg-light text-center">
+                <small class="text-muted d-block" style="font-size:.72rem;">Highest</small>
+                <strong class="text-danger">₹{{ stats_max }}</strong>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="p-2 rounded-3 bg-light text-center">
+                <small class="text-muted d-block" style="font-size:.72rem;">Lowest</small>
+                <strong class="text-success">₹{{ stats_min }}</strong>
+              </div>
+            </div>
+          </div>
+          {% if most_expensive_cat %}
+          <div class="mt-3 p-2 rounded-3" style="background:#eef2ff;">
+            <small class="text-muted d-block" style="font-size:.72rem;">Top Category</small>
+            <strong style="color:#4f46e5;">{{ most_expensive_cat.category__name }}</strong>
+            <span class="text-muted" style="font-size:.8rem;"> — ₹{{ most_expensive_cat.total }}</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row 3 -->
+
+  <!-- ══════════════════════════════════════════════════════════
+       ROW 4 — CATEGORY PROGRESS + RECENT EXPENSES
+  ══════════════════════════════════════════════════════════ -->
+  <div class="row g-3">
+
+    <!-- Top Categories Progress -->
+    <div class="col-lg-5">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body p-4">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h6 class="fw-bold mb-0">Top Categories</h6>
+            <a href="{% url 'budget:utilization' %}" class="text-primary" style="font-size:.8rem;">
+              View All →
+            </a>
+          </div>
+          {% if top_categories %}
+            {% for cat in top_categories %}
+            <div class="mb-3">
+              <div class="d-flex justify-content-between mb-1">
+                <span style="font-size:.85rem; font-weight:600;">{{ cat.category_name }}</span>
+                <span style="font-size:.82rem;" class="
+                  {% if cat.status == 'over_budget' %}text-danger fw-semibold
+                  {% else %}text-muted{% endif %}">
+                  ₹{{ cat.spent }} / ₹{{ cat.budget }}
+                </span>
+              </div>
+              <div class="progress cat-bar">
+                <div class="progress-bar
+                  {% if cat.percentage >= 100 %}bg-danger
+                  {% elif cat.percentage >= 75 %}bg-warning
+                  {% else %}bg-success{% endif %} cat-bar"
+                  style="width:{% if cat.percentage > 100 %}100{% else %}{{ cat.percentage }}{% endif %}%;">
+                </div>
+              </div>
+              <small class="text-muted" style="font-size:.72rem;">{{ cat.percentage }}% used</small>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="text-center py-4 text-muted">
+              <i class="bi bi-bar-chart fs-2 d-block mb-2 opacity-25"></i>
+              <p class="mb-2" style="font-size:.85rem;">No budgets set for this month.</p>
+              <a href="{% url 'budget:add' %}" class="btn btn-primary btn-sm">Set Budget</a>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Expenses -->
+    <div class="col-lg-7">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body p-0">
+          <div class="d-flex justify-content-between align-items-center p-4 pb-2">
+            <h6 class="fw-bold mb-0">Recent Expenses</h6>
+            <a href="{% url 'expenses:list' %}" class="text-primary" style="font-size:.8rem;">
+              View All →
+            </a>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="font-size:.78rem; padding:.6rem 1rem;">Date</th>
+                  <th style="font-size:.78rem;">Category</th>
+                  <th style="font-size:.78rem;">Notes</th>
+                  <th style="font-size:.78rem;">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for expense in recent_expenses %}
+                <tr class="recent-row">
+                  <td style="font-size:.82rem; padding:.6rem 1rem;">{{ expense.date }}</td>
+                  <td>
+                    <span class="badge rounded-pill" style="background:#eef2ff; color:#4f46e5; font-size:.75rem;">
+                      {{ expense.category.name|default:"—" }}
+                    </span>
+                  </td>
+                  <td class="text-muted" style="font-size:.82rem; max-width:140px;">
+                    <span class="text-truncate d-inline-block" style="max-width:130px;">
+                      {{ expense.notes|default:"—" }}
+                    </span>
+                  </td>
+                  <td class="fw-semibold text-danger" style="font-size:.88rem;">₹{{ expense.amount }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="4" class="text-center py-4 text-muted">
+                    <i class="bi bi-receipt fs-2 d-block mb-2 opacity-25"></i>
+                    No expenses this month.
+                    <a href="{% url 'expenses:add' %}" class="text-primary fw-semibold">Add one →</a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row 4 -->
+
+</div><!-- /container -->
+{% endblock %}
+
+
+{% block extra_js %}
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+<script>
+// ── Initial data from Django context ──────────────────────
+const trendsDataInit = {{ trends_data|safe }};
+const currentMonth   = "{{ month_param }}";
+
+let trendsChart   = null;
+let categoryChart = null;
+
+// ── Color palette for categories ──────────────────────────
+const COLORS = [
+  '#4f46e5','#7c3aed','#db2777','#dc2626',
+  '#d97706','#16a34a','#0891b2','#65a30d',
+  '#9333ea','#c2410c'
+];
+
+// ════════════════════════════════════════════════════════════
+// TRENDS LINE CHART
+// ════════════════════════════════════════════════════════════
+function buildTrendsChart(data) {
+  const labels   = data.map(d => d.period);
+  const expenses = data.map(d => d.expenses);
+  const budgets  = data.map(d => d.budget !== undefined ? d.budget : null);
+
+  if (trendsChart) trendsChart.destroy();
+
+  trendsChart = new Chart(document.getElementById('trendsChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label          : 'Expenses',
+          data           : expenses,
+          borderColor    : '#dc2626',
+          backgroundColor: 'rgba(220,38,38,.08)',
+          borderWidth    : 2.5,
+          pointRadius    : 4,
+          tension        : 0.35,
+          fill           : true,
+        },
+        ...(budgets[0] !== null ? [{
+          label          : 'Budget',
+          data           : budgets,
+          borderColor    : '#4f46e5',
+          backgroundColor: 'rgba(79,70,229,.06)',
+          borderWidth    : 2,
+          borderDash     : [6, 4],
+          pointRadius    : 3,
+          tension        : 0.35,
+          fill           : true,
+        }] : [])
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend : { position: 'top', labels: { font: { size: 11 } } },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      scales: {
+        x: { grid: { display: false } },
+        y: {
+          grid       : { color: '#f1f5f9' },
+          ticks      : { callback: v => '₹' + v.toLocaleString() }
+        }
+      }
+    }
+  });
+}
+
+function loadTrends(period) {
+  // Toggle active button
+  document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  $.getJSON(`/dashboard/ajax/trends/?period=${period}&month=${currentMonth}`, function(res) {
+    buildTrendsChart(res.data);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// CATEGORY DONUT CHART
+// ════════════════════════════════════════════════════════════
+function buildCategoryChart(data) {
+  if (categoryChart) categoryChart.destroy();
+
+  if (!data.length) {
+    document.getElementById('chart-legend').innerHTML =
+      '<p class="text-muted text-center" style="font-size:.82rem;">No data for this month.</p>';
+    return;
+  }
+
+  categoryChart = new Chart(document.getElementById('categoryChart'), {
+    type: 'doughnut',
+    data: {
+      labels  : data.map(d => d.category_name),
+      datasets: [{
+        data           : data.map(d => d.amount),
+        backgroundColor: COLORS.slice(0, data.length),
+        borderWidth    : 2,
+        borderColor    : '#fff',
+      }]
+    },
+    options: {
+      responsive        : true,
+      cutout            : '65%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ₹${ctx.parsed.toLocaleString()} (${data[ctx.dataIndex].percentage}%)`
+          }
+        }
+      }
+    }
+  });
+
+  // Custom legend
+  const legend = data.slice(0, 6).map((d, i) => `
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="d-flex align-items-center gap-2">
+        <span class="rounded-circle d-inline-block flex-shrink-0"
+              style="width:10px;height:10px;background:${COLORS[i]};"></span>
+        <span style="font-size:.78rem;">${d.category_name}</span>
+      </div>
+      <span class="fw-semibold" style="font-size:.78rem;">₹${parseFloat(d.amount).toLocaleString()}</span>
+    </div>`).join('');
+  document.getElementById('chart-legend').innerHTML = legend;
+}
+
+function loadCategoryBreakdown() {
+  $.getJSON(`/dashboard/ajax/category-breakdown/?month=${currentMonth}`, function(res) {
+    buildCategoryChart(res.data);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// MONTH SWITCHER — reload page with new month
+// ════════════════════════════════════════════════════════════
+function switchMonth(month) {
+  window.location.href = `/dashboard/?month=${month}`;
+}
+
+// ── Init ──────────────────────────────────────────────────
+$(function () {
+  buildTrendsChart(trendsDataInit);
+  loadCategoryBreakdown();
+});
+</script>
+{% endblock %}
