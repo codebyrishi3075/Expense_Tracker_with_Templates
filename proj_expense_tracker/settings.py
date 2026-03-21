@@ -178,5 +178,5 @@ JAZZMIN_SETTINGS = {
 
 from decouple import config
 
-SECRET_KEY = config('SECRET_KEY')
-JWT_SECRET_KEY = config('JWT_SECRET_KEY')
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-your-secret-key-change-this-in-production')
+JWT_SECRET_KEY = config('JWT_SECRET_KEY', default='your-jwt-secret-key-change-this-in-production')
