@@ -1,28 +1,20 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv
-load_dotenv()
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+from decouple import config
+import dj_database_url
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# -------------------- SECURITY --------------------
+SECRET_KEY = config('SECRET_KEY')
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY')
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-# ALLOWED_HOSTS = []
-# ALLOWED_HOSTS = ['10.129.165.187', '127.0.0.1', 'localhost']
 ALLOWED_HOSTS = [
     'expense-tracker-with-templates.onrender.com',
 ]
 
-
-# Application definition
-
+# -------------------- APPLICATIONS --------------------
 INSTALLED_APPS = [
     'jazzmin',
     'django.contrib.admin',
@@ -31,8 +23,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
-    # My apps
+
+    # Custom apps
     'accounts.apps.AccountsConfig',
     'budget.apps.BudgetConfig',
     'expenses.apps.ExpensesConfig',
@@ -41,19 +33,22 @@ INSTALLED_APPS = [
     'contact_app.apps.ContactAppConfig',
 ]
 
+# -------------------- MIDDLEWARE --------------------
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # MUST be just after SecurityMiddleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
+# -------------------- URLS --------------------
 ROOT_URLCONF = 'proj_expense_tracker.urls'
 
+# -------------------- TEMPLATES --------------------
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -72,11 +67,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'proj_expense_tracker.wsgi.application'
 
+# -------------------- DATABASE --------------------
+# Development: SQLite
 
-# Database
-# https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-# Using SQLite for Development
 # DATABASES = {
 #     'default': {
 #         'ENGINE': 'django.db.backends.sqlite3',
@@ -84,113 +78,79 @@ WSGI_APPLICATION = 'proj_expense_tracker.wsgi.application'
 #     }
 # }
 
-# Using PostgreSQL Database (Production)
+# Production: PostgreSQL (Using dj-database-url)
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME', 'expense_tracker_db'),
-        'USER': os.getenv('DB_USER', 'postgres'),
-        'PASSWORD': os.getenv('DB_PASSWORD', 'password'),
-        'HOST': os.getenv('DB_HOST', 'localhost'),
-        'PORT': os.getenv('DB_PORT', '5432'),
-    }
+    'default': dj_database_url.config(
+        default=config('DATABASE_URL'),
+        conn_max_age=600
+    )
 }
 
-AUTH_USER_MODEL = 'accounts.User'            #This Is Required
+# -------------------- AUTH --------------------
+AUTH_USER_MODEL = 'accounts.User'
 
-
-# --------- AUTHENTICATION Setting ------------------
-# If your login view is at /account_app/login/ (notice singular "account")
 LOGIN_URL = '/accounts/login/'
-LOGIN_REDIRECT_URL = '/accounts/dashboard/'  # Redirect to dashboard after login
+LOGIN_REDIRECT_URL = '/accounts/dashboard/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 
-
-
-# CSRF Settings
-CSRF_COOKIE_HTTPONLY = False  # ✅ Allow JavaScript to read CSRF cookie
-CSRF_COOKIE_SAMESITE = 'Lax'
-CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1:8000', 'http://localhost:8000']
-
-
-# Password validation
-# https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
-
+# -------------------- PASSWORD VALIDATION --------------------
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-
-# Internationalization
-# https://docs.djangoproject.com/en/5.0/topics/i18n/
-
+# -------------------- INTERNATIONALIZATION --------------------
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.0/howto/static-files/
-
+# -------------------- STATIC FILES --------------------
 STATIC_URL = '/static/'
-
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
-
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static'),
 ]
 
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+# -------------------- MEDIA FILES --------------------
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-
-# -----------------------Email Configuration-------------------------------
+# -------------------- EMAIL --------------------
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_HOST_USER = config('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
-# -------------------------------------------------------------------------
 
-# -----------------------Media Files Configuration---------------------------
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
-# -------------------------------------------------------------------------
+# -------------------- CSRF --------------------
+CSRF_TRUSTED_ORIGINS = [
+    'https://expense-tracker-with-templates.onrender.com'
+]
 
+# -------------------- SECURITY SETTINGS --------------------
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = True
 
-# ---------------------JAZZMIN CONFIGURATION-------------------------
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+
+# -------------------- JAZZMIN --------------------
 JAZZMIN_SETTINGS = {
     "site_title": "Expense Tracker Admin",
     "site_header": "Expense Tracker",
-    "welcome_sign": "Welcome to the Expense Tracker Admin",
-    "search_model": "auth.User",
-    "show_sidebar": True,
-    "navigation_expanded": True,
+    "welcome_sign": "Welcome to Expense Tracker Admin",
 }
 
-from decouple import config
+# -------------------- JWT --------------------
+JWT_SECRET_KEY = config('JWT_SECRET_KEY')
 
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-your-secret-key-change-this-in-production')
-JWT_SECRET_KEY = config('JWT_SECRET_KEY', default='your-jwt-secret-key-change-this-in-production')
+# -------------------- DEFAULT PK --------------------
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
