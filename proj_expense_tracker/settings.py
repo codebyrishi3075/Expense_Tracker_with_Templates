@@ -175,3 +175,8 @@ JAZZMIN_SETTINGS = {
     "show_sidebar": True,
     "navigation_expanded": True,
 }
+
+from decouple import config
+
+SECRET_KEY = config('SECRET_KEY')
+JWT_SECRET_KEY = config('JWT_SECRET_KEY')
