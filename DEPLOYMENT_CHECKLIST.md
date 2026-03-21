@@ -44,10 +44,41 @@ Set these in Render dashboard → Environment → Environment Variables:
 | `SECRET_KEY` | Generate new key | **CRITICAL** - Use: `python -c "import secrets; print(secrets.token_urlsafe(50))"` |
 | `DATABASE_URL` | Render PostgreSQL URL | **CRITICAL** - Render will provide this |
 | `EMAIL_HOST_USER` | Your Gmail | Gmail address for sending emails |
-| `EMAIL_HOST_PASSWORD` | Gmail app password | Requires 2FA on Google Account |
+| `EMAIL_HOST_PASSWORD` | Gmail app password | **SEE BELOW** - Special setup required |
 | `JWT_SECRET_KEY` | Generate new key | Use: `python -c "import secrets; print(secrets.token_urlsafe(50))"` |
 
 ⚠️ **IMPORTANT**: The SECRET_KEY and JWT_SECRET_KEY currently have temporary build keys. You MUST change these for production!
+
+---
+
+### 📧 **Email Configuration (SMTP via Gmail)**
+
+Your app uses **Gmail SMTP** to send OTP emails during registration and password reset. Here's how to set it up:
+
+#### **Step 1: Enable 2FA on Google Account**
+1. Go to [myaccount.google.com/security](https://myaccount.google.com/security)
+2. Click "Security" in left sidebar
+3. Enable "2-Step Verification"
+
+#### **Step 2: Generate Gmail App Password**
+1. Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+2. Select **Mail** and **Windows Computer** (or your device)
+3. Click **Generate**
+4. Google will show a 16-character password like: `abcd efgh ijkl mnop`
+5. **Copy this password** (remove spaces): `abcdefghijklmnop`
+
+#### **Step 3: Set on Render Dashboard**
+1. Go to Render dashboard → Select your service
+2. Click **Environment** → **Add Environment Variable**
+3. Add:
+   - **Key**: `EMAIL_HOST_USER` | **Value**: `your-email@gmail.com`
+   - **Key**: `EMAIL_HOST_PASSWORD` | **Value**: `abcdefghijklmnop` (without spaces)
+4. Click **Save** and **Redeploy**
+
+#### **Testing Email**
+1. Try registering a new account on your live app
+2. Check your inbox for OTP email
+3. If email fails, OTP will still be generated (check app logs: `Render → Logs`)
 
 ---
 
@@ -107,11 +138,49 @@ Set these in Render dashboard → Environment → Environment Variables:
 
 1. **NEVER commit real secret keys** to version control
 2. **Generate new SECRET_KEY and JWT_SECRET_KEY** - don't use code examples
-3. **After first deploy**, verify settings:
+3. **Gmail credentials are required for registration** - OTP emails won't work without proper EMAIL_HOST_USER/PASSWORD
+4. **After first deploy**, verify:
    - Django admin accessible at `/admin/`
-   - Email sending works when needed
+   - Registration works and OTP is sent
+   - Login/logout functionality works
    - Static files load correctly
-4. **Monitor logs** in Render dashboard for any runtime issues
+5. **Monitor logs** in Render dashboard for errors: `Render → Logs`
+
+---
+
+### 🔧 **Troubleshooting Common Issues**
+
+#### **500 Error on Register Page**
+- **Cause**: Email configuration incomplete or invalid
+- **Fix**: Set proper `EMAIL_HOST_USER` and `EMAIL_HOST_PASSWORD` on Render (see Email Configuration section above)
+- **Workaround**: Emails fail gracefully - OTP is still created and logged to console
+
+#### **OTP Not Received**
+1. Check your email spam/trash folder
+2. Verify EMAIL_HOST_USER is your real Gmail address
+3. Check Render logs for email errors: `Render → Logs → check for "⚠️ Email sending failed"`
+4. Make sure 2FA is enabled and app password is correct
+
+#### **Login Not Working**
+- Clear browser cookies
+- Make sure email is verified (OTP confirmed)
+- Check user's is_email_verified status in admin panel
+
+---
+
+### ✅ **Post-Deployment Verification Checklist**
+
+After deploying, verify these work:
+
+- [ ] Homepage `/` loads
+- [ ] Register page `/accounts/register/` loads
+- [ ] Can submit registration form
+- [ ] OTP email received (or check logs if email config pending)
+- [ ] OTP verification works
+- [ ] Can login with registered account
+- [ ] Dashboard `/dashboard/` displays
+- [ ] Admin panel `/admin/` accessible with superuser
+- [ ] Static files (CSS, JS) load in browser DevTools
 
 ---
 
@@ -119,7 +188,18 @@ Set these in Render dashboard → Environment → Environment Variables:
 
 **✓ Code is ready to deploy**
 
-**Next action**: Generate secure keys and set environment variables on Render dashboard, then deploy!
+**Final Checklist Before Deploying:**
+1. ✅ All migrations created and committed
+2. ✅ requirements.txt complete with all packages
+3. ✅ render.yaml configured
+4. ✅ Settings.py has fallback values
+5. ✅ Email error handling added
+6. ✅ Code pushed to GitHub ready
+
+**Next action**: 
+1. Set environment variables on Render (especially EMAIL secrets)
+2. Deploy
+3. Test registration flow
 
 ---
 

@@ -44,7 +44,12 @@ def send_otp_email(user: User, purpose: str = 'register') -> None:
             f"— Expense Tracker Team"
         )
 
-    send_mail(subject, message, settings.EMAIL_HOST_USER, [user.email], fail_silently=False)
+    try:
+        send_mail(subject, message, settings.EMAIL_HOST_USER, [user.email], fail_silently=False)
+    except Exception as e:
+        print(f"⚠️ Email sending failed: {str(e)}")
+        print(f"⚠️ OTP for {user.email}: {otp} (valid for 15 minutes)")
+        # Don't raise exception - allow registration to continue
 
 
 # ═══════════════════════════════════
