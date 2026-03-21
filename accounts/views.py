@@ -1,4 +1,5 @@
 import random
+import threading
 from django.shortcuts import render, redirect
 from django.http import JsonResponse, HttpRequest, HttpResponse
 from django.contrib.auth import authenticate, login, logout
@@ -19,37 +20,50 @@ def generate_otp():
 
 
 def send_otp_email(user: User, purpose: str = 'register') -> None:
+    """Send OTP email in a background thread to avoid timeouts."""
     EmailOTP.objects.filter(user=user, purpose=purpose).delete()
     otp = generate_otp()
     EmailOTP.objects.create(user=user, otp=otp, purpose=purpose)
 
-    if purpose == 'register':
-        subject = "Verify Your Email — Expense Tracker"
-        message = (
-            f"Hi {user.first_name or user.username},\n\n"
-            f"Your email verification OTP is:\n\n"
-            f"  {otp}\n\n"
-            f"This OTP is valid for 15 minutes.\n"
-            f"Do not share this with anyone.\n\n"
-            f"— Expense Tracker Team"
-        )
-    else:
-        subject = "Password Reset OTP — Expense Tracker"
-        message = (
-            f"Hi {user.first_name or user.username},\n\n"
-            f"Your password reset OTP is:\n\n"
-            f"  {otp}\n\n"
-            f"This OTP is valid for 15 minutes.\n"
-            f"If you did not request this, please ignore this email.\n\n"
-            f"— Expense Tracker Team"
-        )
+    def _send_email():
+        """Background task to send email."""
+        if purpose == 'register':
+            subject = "Verify Your Email — Expense Tracker"
+            message = (
+                f"Hi {user.first_name or user.username},\n\n"
+                f"Your email verification OTP is:\n\n"
+                f"  {otp}\n\n"
+                f"This OTP is valid for 15 minutes.\n"
+                f"Do not share this with anyone.\n\n"
+                f"— Expense Tracker Team"
+            )
+        else:
+            subject = "Password Reset OTP — Expense Tracker"
+            message = (
+                f"Hi {user.first_name or user.username},\n\n"
+                f"Your password reset OTP is:\n\n"
+                f"  {otp}\n\n"
+                f"This OTP is valid for 15 minutes.\n"
+                f"If you did not request this, please ignore this email.\n\n"
+                f"— Expense Tracker Team"
+            )
 
-    try:
-        send_mail(subject, message, settings.EMAIL_HOST_USER, [user.email], fail_silently=False)
-    except Exception as e:
-        print(f"⚠️ Email sending failed: {str(e)}")
-        print(f"⚠️ OTP for {user.email}: {otp} (valid for 15 minutes)")
-        # Don't raise exception - allow registration to continue
+        try:
+            send_mail(
+                subject, 
+                message, 
+                settings.EMAIL_HOST_USER, 
+                [user.email], 
+                fail_silently=False,
+                timeout=5  # 5 second timeout
+            )
+        except Exception as e:
+            print(f"⚠️ Email sending failed: {str(e)}")
+            print(f"⚠️ OTP for {user.email}: {otp} (valid for 15 minutes)")
+
+    # Send email in background thread (don't block request)
+    email_thread = threading.Thread(target=_send_email, daemon=True)
+    email_thread.start()
 
 
 # ═══════════════════════════════════

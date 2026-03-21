@@ -129,9 +129,9 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='example@gmail.com')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='app-password')
+EMAIL_TIMEOUT = 5  # 5 second timeout for SMTP connections
 
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
