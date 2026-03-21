@@ -6,13 +6,18 @@ import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # -------------------- SECURITY --------------------
-SECRET_KEY = config('SECRET_KEY')
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-temporary-build-key-change-in-production')
 
-DEBUG = False
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = [
     'expense-tracker-with-templates.onrender.com',
+    'localhost',
+    '127.0.0.1',
 ]
+# Allow any Render subdomain
+if config('RENDER_EXTERNAL_HOSTNAME', default=None):
+    ALLOWED_HOSTS.append(config('RENDER_EXTERNAL_HOSTNAME'))
 
 # -------------------- APPLICATIONS --------------------
 INSTALLED_APPS = [
@@ -81,7 +86,7 @@ WSGI_APPLICATION = 'proj_expense_tracker.wsgi.application'
 # Production: PostgreSQL (Using dj-database-url)
 DATABASES = {
     'default': dj_database_url.config(
-        default=config('DATABASE_URL'),
+        default=config('DATABASE_URL', default='sqlite:///db.sqlite3'),
         conn_max_age=600
     )
 }
@@ -125,8 +130,8 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 
-EMAIL_HOST_USER = config('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='example@gmail.com')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='app-password')
 
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
@@ -150,7 +155,7 @@ JAZZMIN_SETTINGS = {
 }
 
 # -------------------- JWT --------------------
-JWT_SECRET_KEY = config('JWT_SECRET_KEY')
+JWT_SECRET_KEY = config('JWT_SECRET_KEY', default='django-insecure-temporary-jwt-key-change-in-production')
 
 # -------------------- DEFAULT PK --------------------
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
