@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: expense-tracker
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python manage.py migrate && python manage.py collectstatic --noinput
+    startCommand: gunicorn proj_expense_tracker.wsgi:application
+    envVars:
+      - key: SECRET_KEY
+        scope: project
+      - key: DATABASE_URL
+        scope: project
+      - key: DJANGO_SETTINGS_MODULE
+        value: proj_expense_tracker.settings
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: EMAIL_HOST_USER
+        scope: project
+      - key: EMAIL_HOST_PASSWORD
+        scope: project
+      - key: JWT_SECRET_KEY
+        scope: project

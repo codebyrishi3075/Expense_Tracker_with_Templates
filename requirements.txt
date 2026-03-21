@@ -8,3 +8,4 @@ PyJWT
 python-dateutil
 gunicorn
 whitenoise
+dj-database-url
