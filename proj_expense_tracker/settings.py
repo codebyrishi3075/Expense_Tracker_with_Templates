@@ -15,7 +15,10 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = False
 
 # ALLOWED_HOSTS = []
-ALLOWED_HOSTS = ['10.129.165.187', '127.0.0.1', 'localhost']
+# ALLOWED_HOSTS = ['10.129.165.187', '127.0.0.1', 'localhost']
+ALLOWED_HOSTS = [
+    'expense-tracker-with-templates.onrender.com',
+]
 
 
 # Application definition
